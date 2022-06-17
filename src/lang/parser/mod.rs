@@ -37,7 +37,7 @@ fn erase(rule: &mut Rule, seen: &mut Vec<u32>) {
         Rule::Expandable { rules, num, .. } => {
             if !seen.contains(num) {
                 seen.push(*num);
-                for sub_rule in &mut rules.into_iter() {
+                for sub_rule in &mut rules.iter_mut() {
                     erase(&mut sub_rule.borrow_mut(), seen);
                 }
                 rules.clear();
@@ -57,10 +57,10 @@ fn print_rule(rule: &Rule, seen: &mut Vec<u32>, result: &mut String, level: usiz
             result.push_str(t.name());
         }
         Rule::Expandable { rules, num, name, .. } => {
-            result.push_str(&name);
+            result.push_str(name);
             if !seen.contains(num) {
                 seen.push(*num);
-                for sub_rule in &mut rules.into_iter() {
+                for sub_rule in &mut rules.iter() {
                     print_rule(&*sub_rule.borrow(), seen, result, level + 1);
                 }
             } else {

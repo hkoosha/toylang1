@@ -24,7 +24,7 @@ identifier -> [a-zA-Z][a-zA-Z0-9]*
 
 ";
 
-fn rules<'a>() -> Rc<RefCell<Rule>> {
+fn rules() -> Rc<RefCell<Rule>> {
     let mut n = 0;
     let mut expandable = move |name: String, rules: Vec<Rc<RefCell<Rule>>>| {
         n += 1;
@@ -40,7 +40,7 @@ fn rules<'a>() -> Rc<RefCell<Rule>> {
 
     let arg = expandable("arg".to_string(), vec![
         identifier.clone(),
-        identifier.clone(),
+        identifier,
     ]);
 
     let args = expandable("args".to_string(), vec![
@@ -57,7 +57,7 @@ fn rules<'a>() -> Rc<RefCell<Rule>> {
         }
     }
 
-    return args0;
+    args0
 }
 
 
