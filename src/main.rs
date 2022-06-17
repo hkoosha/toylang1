@@ -1,7 +1,7 @@
 use log::info;
 use pretty_env_logger::formatted_builder;
 
-use toylang::lang::inefficient_parser::parse;
+use toylang::lang::parser::inefficient_parser::parse;
 use toylang::lang::lexer::Lexer;
 
 fn main() -> Result<(), String> {
@@ -26,7 +26,7 @@ fn main() -> Result<(), String> {
         tokens.push(token)
     }
 
-    parse(vec![], tokens);
+    parse(tokens);
 
     Ok(())
 }
