@@ -86,12 +86,10 @@ fn rules() -> Rc<RefCell<Rule>> {
         Rc::clone(&semi),
     ]);
 
-    let s = expandable("S".to_string(), vec![
+    expandable("S".to_string(), vec![
         fn_call,
         fn_declaration,
-    ]);
-
-    s
+    ])
 }
 
 
