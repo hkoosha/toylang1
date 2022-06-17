@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{BorrowMutError, RefCell, RefMut};
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
@@ -34,11 +34,18 @@ impl Display for Rule {
 fn erase(rule: &mut Rule, seen: &mut Vec<u32>) {
     match rule {
         Rule::Terminal(_) => {}
-        Rule::Expandable { rules, num, .. } => {
+        Rule::Expandable { rules, num, name, .. } => {
             if !seen.contains(num) {
                 seen.push(*num);
                 for sub_rule in &mut rules.iter_mut() {
-                    erase(&mut sub_rule.borrow_mut(), seen);
+                    // erase(&mut sub_rule.borrow_mut(), seen);
+                    let try_borrow_mut = sub_rule.try_borrow_mut();
+                    match try_borrow_mut {
+                        Err(_) => {}
+                        Ok(mut ok) => {
+                            erase(&mut *ok, seen);
+                        }
+                    }
                 }
                 rules.clear();
             }
