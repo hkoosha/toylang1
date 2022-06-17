@@ -1,7 +1,8 @@
 use log::info;
 use pretty_env_logger::formatted_builder;
 
-use toylang::Lexer;
+use toylang::lang::inefficient_parser::parse;
+use toylang::lang::lexer::Lexer;
 
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
@@ -18,10 +19,14 @@ fn main() -> Result<(), String> {
          int z = x0 * y;\
     }";
 
-    let mut lexer = Lexer::new(program);
-    while let Some(token) = lexer.read_token()? {
+    let mut tokens = vec![];
+    for token in Lexer::new(program) {
+        let token = token?;
         info!("{}:{}", token.token_kind.name(), token.text);
+        tokens.push(token)
     }
+
+    parse(vec![], tokens);
 
     Ok(())
 }
