@@ -27,7 +27,7 @@ impl Display for Rule {
         let mut seen = vec![];
         let mut result = "".to_string();
         print_rule(self, &mut seen, &mut result, 0);
-        write!(f, "{}", result)
+        write!(f, "{}", result[1..])
     }
 }
 
