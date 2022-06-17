@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::marker::PhantomPinned;
 use std::rc::Rc;
 
 use log::info;
@@ -33,7 +32,6 @@ fn rules<'a>() -> Rc<RefCell<Rule>> {
             name,
             num: n,
             rules,
-            _pin: PhantomPinned,
         }))
     };
 

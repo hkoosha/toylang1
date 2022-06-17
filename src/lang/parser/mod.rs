@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
-use std::marker::PhantomPinned;
 use std::rc::Rc;
 
 use crate::lang::token::TokenKind;
@@ -13,7 +12,6 @@ enum Rule {
         name: String,
         num: u32,
         rules: Vec<Rc<RefCell<Rule>>>,
-        _pin: PhantomPinned,
     },
 }
 
