@@ -183,10 +183,8 @@ pub fn rules() -> Rc<RefCell<RuleNode>> {
         Rc::clone(&semi),
     ]);
 
-    let s = alternative("S", vec![
+    alternative("S", vec![
         fn_call,
         fn_declaration,
-    ]);
-
-    return s;
+    ])
 }

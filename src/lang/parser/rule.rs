@@ -19,11 +19,27 @@ pub enum RuleNode {
 }
 
 impl RuleNode {
-    pub fn name(&self) -> Option<String> {
+    pub fn name(&self) -> String {
+        match &self {
+            RuleNode::Terminal(t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
+            RuleNode::Expandable { name, .. } => name.clone(),
+            RuleNode::Alternative { name, .. } => name.clone(),
+        }
+    }
+
+    pub fn num(&self) -> Option<usize> {
         match &self {
             RuleNode::Terminal(_) => None,
-            RuleNode::Expandable { name, .. } => Some(name.clone()),
-            RuleNode::Alternative { name, .. } => Some(name.clone()),
+            RuleNode::Expandable { num, .. } => Some(*num),
+            RuleNode::Alternative { num, .. } => Some(*num),
+        }
+    }
+
+    pub fn rules(&self) -> Option<&Vec<Rc<RefCell<RuleNode>>>> {
+        match &self {
+            RuleNode::Terminal(_) => None,
+            RuleNode::Expandable { rules, .. } => Some(rules),
+            RuleNode::Alternative { rules, .. } => Some(rules),
         }
     }
 }
@@ -40,9 +56,15 @@ impl Display for RuleNode {
         let mut state = RuleNodeDisplayState::default();
 
         match &self {
-            RuleNode::Terminal(t) => state.result.push_str(t.name()),
-            RuleNode::Expandable { .. } => do_display(&self, &mut state),
-            RuleNode::Alternative { .. } => do_display(&self, &mut state),
+            RuleNode::Terminal(_) => state.result.push_str(&self.name()),
+            RuleNode::Expandable { .. } => {
+                do_display_itself(self, &mut state);
+                do_display_children(self, &mut state);
+            }
+            RuleNode::Alternative { .. } => {
+                do_display_itself(self, &mut state);
+                do_display_children(self, &mut state);
+            }
         }
 
         write!(f, "{}", &state.result)
@@ -109,15 +131,9 @@ impl RuleNodeDisplayState {
     }
 }
 
-fn do_display(rule_node: &RuleNode,
-              state: &mut RuleNodeDisplayState) {
-    do_display_itself(rule_node, state);
-    do_display_children(rule_node, state);
-}
-
 fn do_display_itself(rule_node: &RuleNode,
                      state: &mut RuleNodeDisplayState) {
-    if !state.should_display(&rule_node) {
+    if !state.should_display(rule_node) {
         return;
     }
 
@@ -125,60 +141,48 @@ fn do_display_itself(rule_node: &RuleNode,
     match &rule_node {
         RuleNode::Terminal(_) => panic!("not expecting terminal in display itself"),
         RuleNode::Expandable { rules, name, .. } => {
-            state.result.push_str(&name);
-            state.result.push_str(" -> ");
-            let names = rules.into_iter()
-                .map(|it| {
-                    match &*it.borrow() {
-                        RuleNode::Terminal(t) => t.repr().unwrap_or(t.name()).to_string(),
-                        RuleNode::Expandable { name, .. } => name.to_string(),
-                        RuleNode::Alternative { name, .. } => name.to_string(),
-                    }
-                })
+            let names = rules.iter()
+                .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" ");
+            state.result.push_str(name);
+            state.result.push_str(" -> ");
             state.result.push_str(&names);
         }
         RuleNode::Alternative { name, rules, .. } => {
-            state.result.push_str(&name);
-            state.result.push_str(" -> ");
-            let names = rules.into_iter()
-                .map(|it| {
-                    match &*it.borrow() {
-                        RuleNode::Terminal(t) => t.repr().unwrap_or(t.name()).to_string(),
-                        RuleNode::Expandable { name, .. } => name.to_string(),
-                        RuleNode::Alternative { .. } => panic!("not expecting alternative within alternative in display itself"),
-                    }
-                })
+            let names = rules.iter()
+                .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" | ");
+            state.result.push_str(name);
+            state.result.push_str(" -> ");
             state.result.push_str(&names);
         }
     }
 }
 
 fn do_display_children(rule_node: &RuleNode,
-                       mut state: &mut RuleNodeDisplayState) {
+                       state: &mut RuleNodeDisplayState) {
     if !state.should_display_children(rule_node) {
         return;
     }
 
     match &rule_node {
-        RuleNode::Terminal(_) => {} // panic!("not expecting terminal in display children"),
+        RuleNode::Terminal(_) => panic!("not expecting terminal in display children"),
         RuleNode::Expandable { rules, .. } => {
-            for r in rules.into_iter() {
-                do_display_itself(&*r.borrow(), &mut state);
+            for r in rules.iter() {
+                do_display_itself(&*r.borrow(), state);
             }
-            for r in rules.into_iter() {
-                do_display_children(&*r.borrow(), &mut state);
+            for r in rules.iter() {
+                do_display_children(&*r.borrow(), state);
             }
         }
         RuleNode::Alternative { rules, .. } => {
-            for r in rules.into_iter() {
-                do_display_itself(&*r.borrow(), &mut state);
+            for r in rules.iter() {
+                do_display_itself(&*r.borrow(), state);
             }
-            for r in rules.into_iter() {
-                do_display_children(&*r.borrow(), &mut state);
+            for r in rules.iter() {
+                do_display_children(&*r.borrow(), state);
             }
         }
     }
@@ -219,6 +223,6 @@ pub trait ToRule {
 
 impl ToRule for TokenKind {
     fn to_rule(self) -> Rc<RefCell<RuleNode>> {
-        return Rc::new(RefCell::new(RuleNode::Terminal(self)));
+        Rc::new(RefCell::new(RuleNode::Terminal(self)))
     }
 }
