@@ -49,6 +49,7 @@ impl Display for RuleNode {
     }
 }
 
+
 #[derive(Default)]
 struct RuleNodeDisplayState {
     result: String,
@@ -182,6 +183,7 @@ fn do_display_children(rule_node: &RuleNode,
         }
     }
 }
+
 
 fn erase(rule: &mut RuleNode, seen: &mut Vec<usize>) {
     match rule {
