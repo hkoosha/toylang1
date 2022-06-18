@@ -15,3 +15,7 @@ run: c
 .PHONY: clippy
 clippy: c
 	cargo clippy
+
+.PHONY: format
+format:
+	cargo fmt

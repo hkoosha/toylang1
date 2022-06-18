@@ -1,6 +1,8 @@
 use log::trace;
-use crate::lang::token::{Token, TokenKind};
 
+use self::token::{Token, TokenKind};
+
+pub mod token;
 
 struct TextCharIter<'a> {
     pos: usize,
@@ -38,7 +40,6 @@ impl<'a> TextCharIter<'a> {
         self.set();
     }
 }
-
 
 pub struct Lexer<'a> {
     is_error: bool,
@@ -159,13 +160,14 @@ impl<'a> Lexer<'a> {
                         return Ok(());
                     }
                 }
-                Some(_) => {
-                    self.add_to_buffer_and_next()
-                }
+                Some(_) => self.add_to_buffer_and_next(),
                 None => {
                     self.is_error = true;
-                    return Err(format!("unterminated string at: {} => {}",
-                                       start, &self.iter.text[self.buffer_start..]));
+                    return Err(format!(
+                        "unterminated string at: {} => {}",
+                        start,
+                        &self.iter.text[self.buffer_start..]
+                    ));
                 }
             }
         }
@@ -263,7 +265,11 @@ impl<'a> Lexer<'a> {
                     return Ok(Some(true));
                 }
                 _ => {
-                    panic!("unexpected character at {}: {}", self.iter.pos, self.iter.current_char.unwrap());
+                    panic!(
+                        "unexpected character at {}: {}",
+                        self.iter.pos,
+                        self.iter.current_char.unwrap()
+                    );
                 }
             }
         }
@@ -282,8 +288,13 @@ impl<'a> Lexer<'a> {
         loop {
             match self.read_next()? {
                 Some(true) => {
-                    trace!("got token: {}: {}~{} = {}",
-                        self.token_kind, self.buffer_start, self.buffer_end, self.buffer());
+                    trace!(
+                        "got token: {}: {}~{} = {}",
+                        self.token_kind,
+                        self.buffer_start,
+                        self.buffer_end,
+                        self.buffer()
+                    );
 
                     return Ok(Some(Token::new(
                         self.buffer_start,
@@ -317,7 +328,6 @@ impl<'a> IntoIterator for Lexer<'a> {
     }
 }
 
-
 pub struct LexerIter<'a> {
     lexer: Lexer<'a>,
     iter_finished: bool,
@@ -332,9 +342,7 @@ impl<'a> Iterator for LexerIter<'a> {
         }
 
         return match self.lexer.read_token() {
-            Ok(v) => {
-                v.map(Ok)
-            }
+            Ok(v) => v.map(Ok),
             Err(err) => {
                 self.iter_finished = true;
                 Some(Err(err))

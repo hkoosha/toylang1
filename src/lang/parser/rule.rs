@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
-use crate::lang::token::TokenKind;
+use crate::lang::lexer::token::TokenKind;
 
 pub enum RuleNode {
     Terminal(TokenKind),
@@ -71,7 +71,6 @@ impl Display for RuleNode {
     }
 }
 
-
 #[derive(Default)]
 struct RuleNodeDisplayState {
     result: String,
@@ -84,9 +83,7 @@ struct RuleNodeDisplayState {
 impl RuleNodeDisplayState {
     fn should_display(&mut self, rule_node: &RuleNode) -> bool {
         match &rule_node {
-            RuleNode::Terminal(_) => {
-                false
-            }
+            RuleNode::Terminal(_) => false,
             RuleNode::Expandable { num, .. } => {
                 if self.seen_ex.contains(num) {
                     false
@@ -108,9 +105,7 @@ impl RuleNodeDisplayState {
 
     fn should_display_children(&mut self, rule_node: &RuleNode) -> bool {
         match &rule_node {
-            RuleNode::Terminal(_) => {
-                false
-            }
+            RuleNode::Terminal(_) => false,
             RuleNode::Expandable { num, .. } => {
                 if self.seen_ex_children.contains(num) {
                     false
@@ -131,8 +126,7 @@ impl RuleNodeDisplayState {
     }
 }
 
-fn do_display_itself(rule_node: &RuleNode,
-                     state: &mut RuleNodeDisplayState) {
+fn do_display_itself(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
     if !state.should_display(rule_node) {
         return;
     }
@@ -141,7 +135,8 @@ fn do_display_itself(rule_node: &RuleNode,
     match &rule_node {
         RuleNode::Terminal(_) => panic!("not expecting terminal in display itself"),
         RuleNode::Expandable { rules, name, .. } => {
-            let names = rules.iter()
+            let names = rules
+                .iter()
                 .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" ");
@@ -150,7 +145,8 @@ fn do_display_itself(rule_node: &RuleNode,
             state.result.push_str(&names);
         }
         RuleNode::Alternative { name, rules, .. } => {
-            let names = rules.iter()
+            let names = rules
+                .iter()
                 .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" | ");
@@ -161,8 +157,7 @@ fn do_display_itself(rule_node: &RuleNode,
     }
 }
 
-fn do_display_children(rule_node: &RuleNode,
-                       state: &mut RuleNodeDisplayState) {
+fn do_display_children(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
     if !state.should_display_children(rule_node) {
         return;
     }
@@ -187,7 +182,6 @@ fn do_display_children(rule_node: &RuleNode,
         }
     }
 }
-
 
 fn erase(rule: &mut RuleNode, seen: &mut Vec<usize>) {
     match rule {
@@ -215,7 +209,6 @@ fn do_erase(rules: &mut Vec<Rc<RefCell<RuleNode>>>, seen: &mut Vec<usize>, num: 
         rules.clear();
     }
 }
-
 
 pub trait ToRule {
     fn to_rule(self) -> Rc<RefCell<RuleNode>>;

@@ -1,8 +1,9 @@
 use log::info;
 use pretty_env_logger::formatted_builder;
 
-use toylang::lang::parser::inefficient_parser::parse;
 use toylang::lang::lexer::Lexer;
+use toylang::lang::parser::grammar::rules;
+use toylang::lang::parser::inefficient_parser::parse;
 
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
@@ -22,11 +23,14 @@ fn main() -> Result<(), String> {
     let mut tokens = vec![];
     for token in Lexer::new(program) {
         let token = token?;
-        info!("{}:{}", token.token_kind.name(), token.text);
+        info!("token, {}: {}", token.token_kind.name(), token.text);
         tokens.push(token)
     }
 
-    parse(tokens);
+    let r = rules();
+    info!("grammar: {}", *r.borrow());
+
+    parse(tokens, r);
 
     Ok(())
 }

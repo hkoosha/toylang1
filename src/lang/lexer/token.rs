@@ -76,7 +76,7 @@ impl TokenKind {
     }
 
     pub fn all() -> Vec<TokenKind> {
-        vec!(
+        vec![
             Self::Err,
             Self::Eof,
             Self::Idt,
@@ -97,7 +97,7 @@ impl TokenKind {
             Self::Mul,
             Self::Min,
             Self::Pls,
-        )
+        ]
     }
 
     pub fn get_for_repr(repr: &str) -> Result<TokenKind, String> {
@@ -117,7 +117,7 @@ impl TokenKind {
             "*" => Ok(Self::Mul),
             "-" => Ok(Self::Min),
             "+" => Ok(Self::Pls),
-            _ => Err(format!("unknown token: {}", repr))
+            _ => Err(format!("unknown token: {}", repr)),
         }
     }
 }
@@ -127,7 +127,6 @@ impl Display for TokenKind {
         write!(f, "TokenKind[{}]", self.name())
     }
 }
-
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
@@ -150,12 +149,20 @@ impl<'a> Token<'a> {
 
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Token[{}~{} / {} / {}]", self.start_pos, self.end_pos, self.token_kind, self.text)
+        write!(
+            f,
+            "Token[{}~{} / {} / {}]",
+            self.start_pos, self.end_pos, self.token_kind, self.text
+        )
     }
 }
 
 impl Debug for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Token[{}~{} / {} / {}]", self.start_pos, self.end_pos, self.token_kind, self.text)
+        write!(
+            f,
+            "Token[{}~{} / {} / {}]",
+            self.start_pos, self.end_pos, self.token_kind, self.text
+        )
     }
 }
