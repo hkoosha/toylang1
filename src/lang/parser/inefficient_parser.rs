@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::lang::lexer::token::Token;
-use crate::lang::parser::rule::RuleNode;
+use crate::lang::parser::rule::Rule;
 
-pub fn parse<'a, T>(tokens: T, rules: Rc<RefCell<RuleNode>>)
+pub fn parse<'a, T>(tokens: T, rules: Rc<RefCell<Rule>>)
 where
     T: IntoIterator<Item = Token<'a>>,
 {
@@ -17,7 +17,7 @@ where
     let root = Rc::clone(&rules);
     let mut focus = Some(&root);
 
-    let mut stack: Vec<Option<RuleNode>> = vec![];
+    let mut stack: Vec<Option<Rule>> = vec![];
     stack.push(None);
 
     loop {

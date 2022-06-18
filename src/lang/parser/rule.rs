@@ -4,48 +4,48 @@ use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
 
-pub enum RuleNode {
+pub enum Rule {
     Terminal(TokenKind),
     Expandable {
         name: String,
         num: usize,
-        rules: Vec<Rc<RefCell<RuleNode>>>,
+        rules: Vec<Rc<RefCell<Rule>>>,
     },
     Alternative {
         name: String,
         num: usize,
-        rules: Vec<Rc<RefCell<RuleNode>>>,
+        rules: Vec<Rc<RefCell<Rule>>>,
     },
 }
 
-impl RuleNode {
+impl Rule {
     pub fn name(&self) -> String {
         match &self {
-            RuleNode::Terminal(t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
-            RuleNode::Expandable { name, .. } => name.clone(),
-            RuleNode::Alternative { name, .. } => name.clone(),
+            Rule::Terminal(t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
+            Rule::Expandable { name, .. } => name.clone(),
+            Rule::Alternative { name, .. } => name.clone(),
         }
     }
 
     pub fn num(&self) -> Option<usize> {
         match &self {
-            RuleNode::Terminal(_) => None,
-            RuleNode::Expandable { num, .. } => Some(*num),
-            RuleNode::Alternative { num, .. } => Some(*num),
+            Rule::Terminal(_) => None,
+            Rule::Expandable { num, .. } => Some(*num),
+            Rule::Alternative { num, .. } => Some(*num),
         }
     }
 
-    pub fn rules(&self) -> Option<&Vec<Rc<RefCell<RuleNode>>>> {
+    pub fn rules(&self) -> Option<&Vec<Rc<RefCell<Rule>>>> {
         match &self {
-            RuleNode::Terminal(_) => None,
-            RuleNode::Expandable { rules, .. } => Some(rules),
-            RuleNode::Alternative { rules, .. } => Some(rules),
+            Rule::Terminal(_) => None,
+            Rule::Expandable { rules, .. } => Some(rules),
+            Rule::Alternative { rules, .. } => Some(rules),
         }
     }
 
     pub fn is_terminal(&self) -> bool {
         match self {
-            RuleNode::Terminal(_) => true,
+            Rule::Terminal(_) => true,
             _ => false,
         }
     }
@@ -56,30 +56,30 @@ impl RuleNode {
 
     pub fn matches(&self, token_kind: &TokenKind) -> bool {
         match self {
-            RuleNode::Terminal(terminal) => terminal == token_kind,
+            Rule::Terminal(terminal) => terminal == token_kind,
             _ => panic!("expecting a terminal"),
         }
     }
 }
 
-impl Drop for RuleNode {
+impl Drop for Rule {
     fn drop(&mut self) {
         let mut seen = vec![];
         erase(self, &mut seen);
     }
 }
 
-impl Display for RuleNode {
+impl Display for Rule {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut state = RuleNodeDisplayState::default();
+        let mut state = RuleDisplayState::default();
 
         match &self {
-            RuleNode::Terminal(_) => state.result.push_str(&self.name()),
-            RuleNode::Expandable { .. } => {
+            Rule::Terminal(_) => state.result.push_str(&self.name()),
+            Rule::Expandable { .. } => {
                 do_display_itself(self, &mut state);
                 do_display_children(self, &mut state);
             }
-            RuleNode::Alternative { .. } => {
+            Rule::Alternative { .. } => {
                 do_display_itself(self, &mut state);
                 do_display_children(self, &mut state);
             }
@@ -90,7 +90,7 @@ impl Display for RuleNode {
 }
 
 #[derive(Default)]
-struct RuleNodeDisplayState {
+struct RuleDisplayState {
     result: String,
     seen_ex: Vec<usize>,
     seen_al: Vec<usize>,
@@ -98,11 +98,11 @@ struct RuleNodeDisplayState {
     seen_al_children: Vec<usize>,
 }
 
-impl RuleNodeDisplayState {
-    fn should_display(&mut self, rule_node: &RuleNode) -> bool {
+impl RuleDisplayState {
+    fn should_display(&mut self, rule_node: &Rule) -> bool {
         match &rule_node {
-            RuleNode::Terminal(_) => false,
-            RuleNode::Expandable { num, .. } => {
+            Rule::Terminal(_) => false,
+            Rule::Expandable { num, .. } => {
                 if self.seen_ex.contains(num) {
                     false
                 }
@@ -111,7 +111,7 @@ impl RuleNodeDisplayState {
                     true
                 }
             }
-            RuleNode::Alternative { num, .. } => {
+            Rule::Alternative { num, .. } => {
                 if self.seen_al.contains(num) {
                     false
                 }
@@ -123,10 +123,10 @@ impl RuleNodeDisplayState {
         }
     }
 
-    fn should_display_children(&mut self, rule_node: &RuleNode) -> bool {
+    fn should_display_children(&mut self, rule_node: &Rule) -> bool {
         match &rule_node {
-            RuleNode::Terminal(_) => false,
-            RuleNode::Expandable { num, .. } => {
+            Rule::Terminal(_) => false,
+            Rule::Expandable { num, .. } => {
                 if self.seen_ex_children.contains(num) {
                     false
                 }
@@ -135,7 +135,7 @@ impl RuleNodeDisplayState {
                     true
                 }
             }
-            RuleNode::Alternative { num, .. } => {
+            Rule::Alternative { num, .. } => {
                 if self.seen_al_children.contains(num) {
                     false
                 }
@@ -148,15 +148,15 @@ impl RuleNodeDisplayState {
     }
 }
 
-fn do_display_itself(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
+fn do_display_itself(rule_node: &Rule, state: &mut RuleDisplayState) {
     if !state.should_display(rule_node) {
         return;
     }
 
     state.result.push('\n');
     match &rule_node {
-        RuleNode::Terminal(_) => panic!("not expecting terminal in display itself"),
-        RuleNode::Expandable { rules, name, .. } => {
+        Rule::Terminal(_) => panic!("not expecting terminal in display itself"),
+        Rule::Expandable { rules, name, .. } => {
             let names = rules
                 .iter()
                 .map(|it| it.borrow().name())
@@ -166,7 +166,7 @@ fn do_display_itself(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
             state.result.push_str(" -> ");
             state.result.push_str(&names);
         }
-        RuleNode::Alternative { name, rules, .. } => {
+        Rule::Alternative { name, rules, .. } => {
             let names = rules
                 .iter()
                 .map(|it| it.borrow().name())
@@ -179,14 +179,14 @@ fn do_display_itself(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
     }
 }
 
-fn do_display_children(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
+fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
     if !state.should_display_children(rule_node) {
         return;
     }
 
     match &rule_node {
-        RuleNode::Terminal(_) => panic!("not expecting terminal in display children"),
-        RuleNode::Expandable { rules, .. } => {
+        Rule::Terminal(_) => panic!("not expecting terminal in display children"),
+        Rule::Expandable { rules, .. } => {
             for r in rules.iter() {
                 do_display_itself(&*r.borrow(), state);
             }
@@ -194,7 +194,7 @@ fn do_display_children(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
                 do_display_children(&*r.borrow(), state);
             }
         }
-        RuleNode::Alternative { rules, .. } => {
+        Rule::Alternative { rules, .. } => {
             for r in rules.iter() {
                 do_display_itself(&*r.borrow(), state);
             }
@@ -205,19 +205,19 @@ fn do_display_children(rule_node: &RuleNode, state: &mut RuleNodeDisplayState) {
     }
 }
 
-fn erase(rule: &mut RuleNode, seen: &mut Vec<usize>) {
+fn erase(rule: &mut Rule, seen: &mut Vec<usize>) {
     match rule {
-        RuleNode::Terminal(_) => {}
-        RuleNode::Expandable { rules, num, .. } => {
+        Rule::Terminal(_) => {}
+        Rule::Expandable { rules, num, .. } => {
             do_erase(rules, seen, num);
         }
-        RuleNode::Alternative { rules, num, .. } => {
+        Rule::Alternative { rules, num, .. } => {
             do_erase(rules, seen, num);
         }
     }
 }
 
-fn do_erase(rules: &mut Vec<Rc<RefCell<RuleNode>>>, seen: &mut Vec<usize>, num: &usize) {
+fn do_erase(rules: &mut Vec<Rc<RefCell<Rule>>>, seen: &mut Vec<usize>, num: &usize) {
     if !seen.contains(num) {
         seen.push(*num);
         for sub_rule in &mut rules.iter_mut() {
@@ -233,11 +233,11 @@ fn do_erase(rules: &mut Vec<Rc<RefCell<RuleNode>>>, seen: &mut Vec<usize>, num: 
 }
 
 pub trait ToRule {
-    fn to_rule(self) -> Rc<RefCell<RuleNode>>;
+    fn to_rule(self) -> Rc<RefCell<Rule>>;
 }
 
 impl ToRule for TokenKind {
-    fn to_rule(self) -> Rc<RefCell<RuleNode>> {
-        Rc::new(RefCell::new(RuleNode::Terminal(self)))
+    fn to_rule(self) -> Rc<RefCell<Rule>> {
+        Rc::new(RefCell::new(Rule::Terminal(self)))
     }
 }

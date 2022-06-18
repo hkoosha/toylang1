@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
-use crate::lang::parser::rule::{RuleNode, ToRule};
+use crate::lang::parser::rule::{Rule, ToRule};
 
 #[allow(dead_code)]
 const GRAMMAR: &str = "
@@ -22,46 +22,46 @@ identifier -> IDT
 
 ";
 
-pub fn rules() -> Rc<RefCell<RuleNode>> {
+pub fn rules() -> Rc<RefCell<Rule>> {
     let mut e_num = 0;
-    let mut expandable = move |name: &'static str, rules: Vec<Rc<RefCell<RuleNode>>>| {
+    let mut expandable = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
         e_num += 1;
-        Rc::new(RefCell::new(RuleNode::Expandable {
+        Rc::new(RefCell::new(Rule::Expandable {
             name: name.to_string(),
             num: e_num,
             rules,
         }))
     };
     let push =
-        |into: &Rc<RefCell<RuleNode>>, item: &Rc<RefCell<RuleNode>>| match &mut *Rc::clone(into)
+        |into: &Rc<RefCell<Rule>>, item: &Rc<RefCell<Rule>>| match &mut *Rc::clone(into)
             .borrow_mut()
         {
-            RuleNode::Expandable { rules, .. } => {
+            Rule::Expandable { rules, .. } => {
                 rules.push(Rc::clone(item));
             }
-            RuleNode::Alternative { rules, .. } => {
+            Rule::Alternative { rules, .. } => {
                 rules.push(Rc::clone(item));
             }
             _ => panic!(),
         };
 
-    let push_all = |into: &Rc<RefCell<RuleNode>>, item: Vec<&Rc<RefCell<RuleNode>>>| {
+    let push_all = |into: &Rc<RefCell<Rule>>, item: Vec<&Rc<RefCell<Rule>>>| {
         for i in item {
             push(into, i);
         }
     };
 
     let mut a_num = 0;
-    let mut alternative = move |name: &'static str, rules: Vec<Rc<RefCell<RuleNode>>>| {
+    let mut alternative = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
         a_num += 1;
-        Rc::new(RefCell::new(RuleNode::Alternative {
+        Rc::new(RefCell::new(Rule::Alternative {
             name: name.to_string(),
             num: a_num,
             rules,
         }))
     };
 
-    let rbc: Rc<RefCell<RuleNode>> = TokenKind::Rbc.to_rule();
+    let rbc: Rc<RefCell<Rule>> = TokenKind::Rbc.to_rule();
     let lbc = TokenKind::Lbc.to_rule();
     let lpr = TokenKind::Lpr.to_rule();
     let rpr = TokenKind::Rpr.to_rule();
