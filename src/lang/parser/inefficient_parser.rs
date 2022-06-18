@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use log::info;
 
-use crate::lang::parser::Rule;
+use crate::lang::parser::rule::RuleNode;
+use crate::lang::parser::rule::ToRule;
 use crate::lang::token::{Token, TokenKind};
 
 #[allow(dead_code)]
@@ -20,65 +21,80 @@ fn_body -> identifier identifier ';'
 args -> arg ',' args | arg
 arg -> identifier identifier
 
-identifier -> [a-zA-Z][a-zA-Z0-9]*
+identifier -> IDT
 
 ";
 
-fn rules() -> Rc<RefCell<Rule>> {
-    let mut n = 0;
-    let mut expandable = move |name: String, rules: Vec<Rc<RefCell<Rule>>>| {
-        n += 1;
-        Rc::new(RefCell::new(Rule::Expandable {
-            name,
-            num: n,
+fn rules() -> Rc<RefCell<RuleNode>> {
+    let mut e_num = 0;
+    let mut expandable = move |name: &'static str, rules: Vec<Rc<RefCell<RuleNode>>>| {
+        e_num += 1;
+        Rc::new(RefCell::new(RuleNode::Expandable {
+            name: name.to_string(),
+            num: e_num,
             rules,
         }))
     };
 
-    let lbc = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Rbc)));
-    let rbc = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Lbc)));
-    let lpr = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Lpr)));
-    let rpr = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Rpr)));
-    let fn_ = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Fun)));
-    let semi = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Smi)));
-    let comma = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Com)));
-    let identifier = Rc::new(RefCell::new(Rule::Terminal(TokenKind::Idt)));
+    let mut a_num = 0;
+    let mut alternative = move |name: &'static str, rules: Vec<Rc<RefCell<RuleNode>>>| {
+        a_num += 1;
+        Rc::new(RefCell::new(RuleNode::Alternative {
+            name: name.to_string(),
+            num: a_num,
+            rules,
+        }))
+    };
 
-    let arg = expandable("arg".to_string(), vec![
+    let lbc: Rc<RefCell<RuleNode>> = TokenKind::Rbc.to_rule();
+    let rbc = TokenKind::Lbc.to_rule();
+    let lpr = TokenKind::Lpr.to_rule();
+    let rpr = TokenKind::Rpr.to_rule();
+    let fn_ = TokenKind::Fun.to_rule();
+    let semi = TokenKind::Smi.to_rule();
+    let comma = TokenKind::Com.to_rule();
+    let identifier = TokenKind::Idt.to_rule();
+
+    let arg = expandable("arg", vec![
         Rc::clone(&identifier),
         Rc::clone(&identifier),
     ]);
 
-    let args = expandable("args".to_string(), vec![
-        arg,
+    let args0 = expandable("args0", vec![
+        Rc::clone(&arg),
         comma,
     ]);
-    match &mut *Rc::clone(&args).borrow_mut() {
-        Rule::Terminal(_) => panic!(),
-        Rule::Expandable { rules, .. } => {
+    let args1 = expandable("args1", vec![
+        Rc::clone(&arg),
+    ]);
+    let args = alternative("args", vec![
+        Rc::clone(&args0),
+        Rc::clone(&args1),
+    ]);
+    match &mut *Rc::clone(&args0).borrow_mut() {
+        RuleNode::Expandable { rules, .. } => {
             rules.push(Rc::clone(&args));
         }
+        _ => panic!(),
     }
 
-    let fn_body = expandable("fn_body".to_string(), vec![
+    let statements = expandable("statements", vec![
         Rc::clone(&identifier),
         Rc::clone(&identifier),
         Rc::clone(&semi),
     ]);
 
-    let fn_declaration = expandable("fn_declaration".to_string(), vec![
+    let fn_declaration = expandable("fn_declaration", vec![
         fn_,
         Rc::clone(&lpr),
         Rc::clone(&args),
         Rc::clone(&rpr),
         lbc,
-        fn_body,
+        statements,
         rbc,
     ]);
 
-    // fn_call -> identifier '(' args ')' ';'
-
-    let fn_call = expandable("fn_call".to_string(), vec![
+    let fn_call = expandable("fn_call", vec![
         Rc::clone(&identifier),
         Rc::clone(&lpr),
         Rc::clone(&args),
@@ -86,10 +102,12 @@ fn rules() -> Rc<RefCell<Rule>> {
         Rc::clone(&semi),
     ]);
 
-    expandable("S".to_string(), vec![
+    let s = alternative("S", vec![
         fn_call,
         fn_declaration,
-    ])
+    ]);
+
+    return s;
 }
 
 
@@ -100,7 +118,7 @@ pub fn parse<'a, T>(tokens: T)
     let r = rules();
 
     println!("====================================");
-    println!("{}", r.borrow());
+    println!("{}", *r.borrow());
     println!("====================================");
 
     for t in tokens.into_iter() {
