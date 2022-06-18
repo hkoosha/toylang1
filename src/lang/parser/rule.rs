@@ -42,6 +42,24 @@ impl RuleNode {
             RuleNode::Alternative { rules, .. } => Some(rules),
         }
     }
+
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            RuleNode::Terminal(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_non_terminal(&self) -> bool {
+        !self.is_terminal()
+    }
+
+    pub fn matches(&self, token_kind: &TokenKind) -> bool {
+        match self {
+            RuleNode::Terminal(terminal) => terminal == token_kind,
+            _ => panic!("expecting a terminal"),
+        }
+    }
 }
 
 impl Drop for RuleNode {
@@ -87,7 +105,8 @@ impl RuleNodeDisplayState {
             RuleNode::Expandable { num, .. } => {
                 if self.seen_ex.contains(num) {
                     false
-                } else {
+                }
+                else {
                     self.seen_ex.push(*num);
                     true
                 }
@@ -95,7 +114,8 @@ impl RuleNodeDisplayState {
             RuleNode::Alternative { num, .. } => {
                 if self.seen_al.contains(num) {
                     false
-                } else {
+                }
+                else {
                     self.seen_al.push(*num);
                     true
                 }
@@ -109,7 +129,8 @@ impl RuleNodeDisplayState {
             RuleNode::Expandable { num, .. } => {
                 if self.seen_ex_children.contains(num) {
                     false
-                } else {
+                }
+                else {
                     self.seen_ex_children.push(*num);
                     true
                 }
@@ -117,7 +138,8 @@ impl RuleNodeDisplayState {
             RuleNode::Alternative { num, .. } => {
                 if self.seen_al_children.contains(num) {
                     false
-                } else {
+                }
+                else {
                     self.seen_al_children.push(*num);
                     true
                 }

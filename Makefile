@@ -19,3 +19,6 @@ clippy: c
 .PHONY: format
 format:
 	cargo fmt
+
+.PHONY: fmt
+fmt: format

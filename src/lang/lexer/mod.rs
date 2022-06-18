@@ -28,7 +28,8 @@ impl<'a> TextCharIter<'a> {
     fn set(&mut self) {
         if self.has() {
             self.current_char = self.text.chars().nth(self.pos)
-        } else {
+        }
+        else {
             self.current_char = None
         }
     }
@@ -111,7 +112,8 @@ impl<'a> Lexer<'a> {
                 _ => {
                     self.token_kind = if let Ok(kind) = TokenKind::get_for_repr(self.buffer()) {
                         kind
-                    } else {
+                    }
+                    else {
                         TokenKind::Idt
                     };
                     return;
@@ -125,10 +127,12 @@ impl<'a> Lexer<'a> {
             let c = self.iter.current_char.unwrap();
             if ('0'..='9').contains(&c) {
                 self.add_to_buffer_and_next();
-            } else if c.is_ascii_alphabetic() {
+            }
+            else if c.is_ascii_alphabetic() {
                 self.is_error = true;
                 return Err(format!("unexpected char while reading number: {}", c));
-            } else {
+            }
+            else {
                 return Ok(());
             }
         }
@@ -146,7 +150,8 @@ impl<'a> Lexer<'a> {
                 Some('\\') => {
                     if self.in_escape {
                         self.in_escape = false;
-                    } else {
+                    }
+                    else {
                         self.in_escape = true;
                     }
                     self.add_to_buffer_and_next();
@@ -155,7 +160,8 @@ impl<'a> Lexer<'a> {
                     if self.in_escape {
                         self.add_to_buffer_and_next();
                         self.in_escape = false;
-                    } else {
+                    }
+                    else {
                         self.iter.next();
                         return Ok(());
                     }
