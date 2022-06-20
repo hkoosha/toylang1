@@ -139,6 +139,11 @@ fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
     }
 
     result.push_str(&node.borrow().rule().borrow().name());
+    if node.borrow().token.is_some() {
+        result.push_str("  [");
+        result.push_str(&node.borrow().token.unwrap().text);
+        result.push(']');
+    }
 
     for n in &node.borrow().children {
         display_node(n, result, level + 1);

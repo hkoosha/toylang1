@@ -12,6 +12,10 @@ struct BacktrackingParser<'a> {
 
 impl<'a> BacktrackingParser<'a> {
     fn expand(&mut self) -> bool {
+        if is_matching_ready(&self.tree) == MatchingReady::Neutral {
+            println!("fuck");
+            return false;
+        }
         return expand(&self.tree);
     }
 
@@ -24,7 +28,11 @@ impl<'a> BacktrackingParser<'a> {
         }
 
         let terminal = terminal.unwrap();
-        println!("terminal: {} <=> {}", terminal.borrow().rule().borrow().name(), &self.tokens.last().unwrap().text);
+        println!(
+            "terminal: {} <=> {}",
+            terminal.borrow().rule().borrow().name(),
+            &self.tokens.last().unwrap().text
+        );
         if terminal
             .borrow()
             .rule()
@@ -39,7 +47,7 @@ impl<'a> BacktrackingParser<'a> {
     }
 
     fn is_matching_ready(&self) -> bool {
-        return is_matching_ready(&self.tree);
+        return is_matching_ready(&self.tree) == MatchingReady::Ready;
     }
 
     fn backtrack(&mut self) -> bool {
@@ -79,8 +87,7 @@ fn backtrack<'a>(node: &Rc<RefCell<Node<'a>>>, tokens: &mut Vec<Token<'a>>) -> B
         if Backtrack::Backtracked == backtrack(c, tokens) {
             println!("child backtracked");
             any_child_backtracked = true;
-        }
-        else {
+        } else {
             num_to_pop += 1;
         }
     }
@@ -102,6 +109,7 @@ fn backtrack<'a>(node: &Rc<RefCell<Node<'a>>>, tokens: &mut Vec<Token<'a>>) -> B
 
 fn expand(node: &Rc<RefCell<Node>>) -> bool {
     if node.borrow().rule().borrow().is_terminal() {
+        println!("focus is terminal");
         return false;
     }
 
@@ -126,6 +134,8 @@ fn expand(node: &Rc<RefCell<Node>>) -> bool {
         .map(|it| Node::child(it))
         .collect();
 
+    println!("rule_borrow: {}", rule_borrow);
+
     drop(rule_borrow);
     drop(node_borrow);
 
@@ -134,21 +144,44 @@ fn expand(node: &Rc<RefCell<Node>>) -> bool {
     return true;
 }
 
-fn is_matching_ready(node: &Rc<RefCell<Node>>) -> bool {
+#[derive(PartialEq, Eq)]
+enum MatchingReady {
+    Ready,
+    NeedExpand,
+    Neutral,
+}
+
+fn is_matching_ready(node: &Rc<RefCell<Node>>) -> MatchingReady {
     let node = node.borrow();
+
     if node.rule().borrow().is_terminal() {
-        return node.token.is_none();
+        return if node.token.is_none() {
+            MatchingReady::Ready
+        } else {
+            MatchingReady::Neutral
+        };
     }
 
-    if !node.children.is_empty() {
-        for child in &node.children {
-            if is_matching_ready(child) {
-                return true;
+    if node.children.is_empty() {
+        println!("================================ NO CHILDREN, need Expanding");
+        return MatchingReady::NeedExpand;
+    }
+
+    println!("with children: {} ////////////", node);
+    for child in &node.children {
+        match is_matching_ready(child) {
+            MatchingReady::Ready => {
+                return MatchingReady::Ready;
             }
+            MatchingReady::NeedExpand => {
+                return MatchingReady::NeedExpand;
+            }
+            MatchingReady::Neutral => {}
         }
     }
 
-    return false;
+    println!("=======================================================================> Neutral");
+    return MatchingReady::Neutral;
 }
 
 pub fn parse_inefficiently(
@@ -165,23 +198,31 @@ pub fn parse_inefficiently(
     };
 
     loop {
+        if parser.tokens.last().is_some() {
+            println!("CURRENT :::: {}", &parser.tokens.last().unwrap());
+        }
+        println!("EXPANDING?");
         while !parser.is_matching_ready() {
+            println!("-------------------------------> EXPANDING");
             if !parser.expand() {
                 return Err("can not expand".to_string());
-            }
-            else {
+            } else {
                 println!("expanded");
             }
         }
+        println!("EXPANDING!");
 
-        println!("matches? {}", parser.tree.borrow());
+        println!(
+            "matches? {} {}",
+            parser.tree.borrow(),
+            &parser.tokens.last().unwrap()
+        );
         if !parser.match_next() {
             println!("no match");
             if !parser.backtrack() {
                 return Err("can not backtrack".to_string());
             }
-        }
-        else {
+        } else {
             println!("MATCH");
         }
 
