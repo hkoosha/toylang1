@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
@@ -9,12 +9,12 @@ pub enum Rule {
     Expandable {
         name: String,
         num: usize,
-        rules: Vec<Rc<RefCell<Rule>>>,
+        sub_rules: Vec<Rc<RefCell<Rule>>>,
     },
     Alternative {
         name: String,
         num: usize,
-        rules: Vec<Rc<RefCell<Rule>>>,
+        sub_rules: Vec<Rc<RefCell<Rule>>>,
     },
 }
 
@@ -35,19 +35,16 @@ impl Rule {
         }
     }
 
-    pub fn rules(&self) -> Option<&Vec<Rc<RefCell<Rule>>>> {
+    pub fn sub_rules(&self) -> Option<&Vec<Rc<RefCell<Rule>>>> {
         match &self {
             Rule::Terminal(_) => None,
-            Rule::Expandable { rules, .. } => Some(rules),
-            Rule::Alternative { rules, .. } => Some(rules),
+            Rule::Expandable { sub_rules, .. } => Some(sub_rules),
+            Rule::Alternative { sub_rules, .. } => Some(sub_rules),
         }
     }
 
     pub fn is_terminal(&self) -> bool {
-        match self {
-            Rule::Terminal(_) => true,
-            _ => false,
-        }
+        matches!(self, Rule::Terminal(_))
     }
 
     pub fn is_non_terminal(&self) -> bool {
@@ -86,6 +83,12 @@ impl Display for Rule {
         }
 
         write!(f, "{}", &state.result)
+    }
+}
+
+impl Debug for Rule {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format!("{}", self))
     }
 }
 
@@ -156,23 +159,31 @@ fn do_display_itself(rule_node: &Rule, state: &mut RuleDisplayState) {
     state.result.push('\n');
     match &rule_node {
         Rule::Terminal(_) => panic!("not expecting terminal in display itself"),
-        Rule::Expandable { rules, name, .. } => {
+        Rule::Expandable {
+            sub_rules: rules,
+            name,
+            ..
+        } => {
             let names = rules
                 .iter()
                 .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" ");
-            state.result.push_str(name);
+            state.result.push_str(&format!("{:15}", name));
             state.result.push_str(" -> ");
             state.result.push_str(&names);
         }
-        Rule::Alternative { name, rules, .. } => {
+        Rule::Alternative {
+            name,
+            sub_rules: rules,
+            ..
+        } => {
             let names = rules
                 .iter()
                 .map(|it| it.borrow().name())
                 .collect::<Vec<String>>()
                 .join(" | ");
-            state.result.push_str(name);
+            state.result.push_str(&format!("{:15}", name));
             state.result.push_str(" -> ");
             state.result.push_str(&names);
         }
@@ -186,7 +197,9 @@ fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
 
     match &rule_node {
         Rule::Terminal(_) => panic!("not expecting terminal in display children"),
-        Rule::Expandable { rules, .. } => {
+        Rule::Expandable {
+            sub_rules: rules, ..
+        } => {
             for r in rules.iter() {
                 do_display_itself(&*r.borrow(), state);
             }
@@ -194,7 +207,9 @@ fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
                 do_display_children(&*r.borrow(), state);
             }
         }
-        Rule::Alternative { rules, .. } => {
+        Rule::Alternative {
+            sub_rules: rules, ..
+        } => {
             for r in rules.iter() {
                 do_display_itself(&*r.borrow(), state);
             }
@@ -208,10 +223,18 @@ fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
 fn erase(rule: &mut Rule, seen: &mut Vec<usize>) {
     match rule {
         Rule::Terminal(_) => {}
-        Rule::Expandable { rules, num, .. } => {
+        Rule::Expandable {
+            sub_rules: rules,
+            num,
+            ..
+        } => {
             do_erase(rules, seen, num);
         }
-        Rule::Alternative { rules, num, .. } => {
+        Rule::Alternative {
+            sub_rules: rules,
+            num,
+            ..
+        } => {
             do_erase(rules, seen, num);
         }
     }

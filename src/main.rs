@@ -2,8 +2,8 @@ use log::info;
 use pretty_env_logger::formatted_builder;
 
 use toylang::lang::lexer::Lexer;
-use toylang::lang::parser::grammar::rules;
-use toylang::lang::parser::inefficient_parser::parse;
+use toylang::lang::parser::grammar::toylang_v0_rules;
+use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
 
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
@@ -27,10 +27,10 @@ fn main() -> Result<(), String> {
         tokens.push(token)
     }
 
-    let r = rules();
+    let r = toylang_v0_rules();
     info!("grammar: {}", *r.borrow());
 
-    parse(tokens, r);
+    parse_inefficiently(tokens, r)?;
 
     Ok(())
 }

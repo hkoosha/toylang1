@@ -7,43 +7,55 @@ use crate::lang::parser::rule::{Rule, ToRule};
 #[allow(dead_code)]
 const GRAMMAR: &str = "
 
-S -> fn_declaration | fn_call
-
-fn_call -> identifier '(' args ')' ';'
-
-fn_declaration -> 'fn' '(' args ')' '{' fn_body '}'
-
-fn_body -> identifier identifier ';'
-
-args -> arg ',' args | arg
-arg -> identifier identifier
-
-identifier -> IDT
+S               -> fn_call | fn_declaration
+fn_call         -> IDT ( args ) ;
+fn_declaration  -> fn ( args ) { statements }
+args            -> args0 | args1
+args0           -> arg , args
+args1           -> arg
+arg             -> IDT IDT
+statements      -> statements0 | statements1
+statements0     -> statement , statements
+statements1     -> statement
+statement       -> declaration | assignment
+declaration     -> IDT IDT ;
+assignment      -> IDT = expression ;
+expression      -> expression0 | expression1 | expression2
+expression0     -> expression + term
+expression1     -> expression - term
+expression2     -> term
+term            -> term0 | term1 | term2
+term0           -> term * factor
+term1           -> term / factor
+term2           -> factor
+factor          -> factor0 | factor1 | factor2
+factor0         -> ( expression )
+factor1         -> INT
+factor2         -> IDT
 
 ";
 
-pub fn rules() -> Rc<RefCell<Rule>> {
+pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let mut e_num = 0;
     let mut expandable = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
         e_num += 1;
         Rc::new(RefCell::new(Rule::Expandable {
             name: name.to_string(),
             num: e_num,
-            rules,
+            sub_rules: rules,
         }))
     };
-    let push =
-        |into: &Rc<RefCell<Rule>>, item: &Rc<RefCell<Rule>>| match &mut *Rc::clone(into)
-            .borrow_mut()
-        {
-            Rule::Expandable { rules, .. } => {
-                rules.push(Rc::clone(item));
-            }
-            Rule::Alternative { rules, .. } => {
-                rules.push(Rc::clone(item));
-            }
-            _ => panic!(),
-        };
+    let push = |into: &Rc<RefCell<Rule>>, item: &Rc<RefCell<Rule>>| match &mut *Rc::clone(into)
+        .borrow_mut()
+    {
+        Rule::Expandable { sub_rules: rules, .. } => {
+            rules.push(Rc::clone(item));
+        }
+        Rule::Alternative { sub_rules: rules, .. } => {
+            rules.push(Rc::clone(item));
+        }
+        _ => panic!(),
+    };
 
     let push_all = |into: &Rc<RefCell<Rule>>, item: Vec<&Rc<RefCell<Rule>>>| {
         for i in item {
@@ -57,7 +69,7 @@ pub fn rules() -> Rc<RefCell<Rule>> {
         Rc::new(RefCell::new(Rule::Alternative {
             name: name.to_string(),
             num: a_num,
-            rules,
+            sub_rules: rules,
         }))
     };
 
