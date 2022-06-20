@@ -9,7 +9,7 @@ const GRAMMAR: &str = "
 
 S               -> fn_call | fn_declaration
 fn_call         -> IDT ( args ) ;
-fn_declaration  -> fn ( args ) { statements }
+fn_declaration  -> fn IDT ( args ) { statements }
 args            -> args0 | args1
 args0           -> arg , args
 args1           -> arg
@@ -174,6 +174,7 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         "fn_declaration",
         vec![
             fun,
+            Rc::clone(&identifier),
             Rc::clone(&lpr),
             Rc::clone(&args),
             Rc::clone(&rpr),

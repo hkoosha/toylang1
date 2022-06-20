@@ -22,3 +22,8 @@ format:
 
 .PHONY: fmt
 fmt: format
+
+.PHONY: backtrace
+backtrace:
+	RUST_BACKTRACE=1 cargo run 2>&1 | grep lang
+

@@ -47,6 +47,10 @@ impl Rule {
         matches!(self, Rule::Terminal(_))
     }
 
+    pub fn is_alternative(&self) -> bool {
+        matches!(self, Rule::Alternative{..})
+    }
+
     pub fn is_non_terminal(&self) -> bool {
         !self.is_terminal()
     }
