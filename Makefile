@@ -2,7 +2,7 @@
 
 .PHONY: c
 c:
-	sh -c 'for i in $$(seq 0 100); do echo; done'	
+	@sh -c 'for i in $$(seq 0 100); do echo; done'	
 
 .PHONY: build
 build: c
@@ -10,7 +10,7 @@ build: c
 
 .PHONY: run
 run: c
-	cargo run
+	@cargo run
 
 .PHONY: clippy
 clippy: c
@@ -25,5 +25,5 @@ fmt: format
 
 .PHONY: backtrace
 backtrace:
-	RUST_BACKTRACE=1 cargo run
+	RUST_BACKTRACE=1 cargo run 2>&1 | grep -v core:: | grep -v 'at /rustc'
 

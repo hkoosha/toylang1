@@ -8,31 +8,26 @@ use crate::lang::parser::rule::Rule;
 struct BacktrackingParser<'a> {
     tokens: Vec<Token<'a>>,
     tree: Rc<RefCell<Node<'a>>>,
+    step_no: isize,
 }
 
 impl<'a> BacktrackingParser<'a> {
     fn expand(&mut self) -> bool {
         if is_matching_ready(&self.tree) == MatchingReady::Neutral {
-            println!("fuck");
             return false;
         }
-        return expand(&self.tree);
+        self.step_no += 1;
+        expand(&self.tree, self.step_no as usize)
     }
 
     fn match_next(&mut self) -> bool {
         let terminal = left_most_empty_terminal(&self.tree);
 
         if terminal.is_none() {
-            println!("no terminal");
             return false;
         }
 
         let terminal = terminal.unwrap();
-        println!(
-            "terminal: {} <=> {}",
-            terminal.borrow().rule().borrow().name(),
-            &self.tokens.last().unwrap().text
-        );
         if terminal
             .borrow()
             .rule()
@@ -42,8 +37,9 @@ impl<'a> BacktrackingParser<'a> {
             terminal.borrow_mut().token = Some(self.tokens.pop().unwrap());
             return true;
         }
-
-        false
+        else {
+            false
+        }
     }
 
     fn is_matching_ready(&self) -> bool {
@@ -51,97 +47,204 @@ impl<'a> BacktrackingParser<'a> {
     }
 
     fn backtrack(&mut self) -> bool {
-        backtrack(&self.tree, &mut self.tokens) == Backtrack::Backtracked
+        if self.step_no < 0 {
+            println!("steps all consumed");
+            return false;
+        }
+
+        loop {
+            let backtrack_result = backtrack(&self.tree, &mut self.tokens, self.step_no);
+            match backtrack_result {
+                Backtrack::NoOp => return false,
+                Backtrack::Backtracked { any_alternated, .. } => {
+                    self.step_no -= 1;
+                    if !any_alternated {
+                        return false;
+                    }
+                }
+            }
+
+            if expandable(&self.tree) {
+                break;
+            }
+            if self.step_no < 0 {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
 #[derive(PartialEq, Eq)]
 enum Backtrack {
     NoOp,
-    Backtracked,
+    Backtracked {
+        any_alternated: bool,
+        erase_us: bool,
+    },
 }
 
-fn backtrack<'a>(node: &Rc<RefCell<Node<'a>>>, tokens: &mut Vec<Token<'a>>) -> Backtrack {
-    if node.borrow().rule().borrow().is_terminal() {
-        println!("backtrack terminal");
-        if node.borrow().token.is_some() {
-            println!(
-                "putting back token: {}",
-                node.borrow().token.unwrap().token_kind
-            );
-            let mut pop = None;
-            std::mem::swap(&mut pop, &mut node.borrow_mut().token);
-            tokens.push(pop.unwrap());
+fn backtrack<'a>(
+    node: &Rc<RefCell<Node<'a>>>,
+    tokens: &mut Vec<Token<'a>>,
+    step: isize,
+) -> Backtrack {
+    let is_my_step = node.borrow().step_no >= (step as usize);
+    // println!(
+    //     "my_step={}, incoming_step={} my_step={} me={}",
+    //     node.borrow().step_no,
+    //     step,
+    //     is_my_step,
+    //     node.borrow().rule_name(),
+    // );
+
+    if node.borrow().is_terminal() {
+        return if is_my_step {
+            if node.borrow().token.is_some() {
+                let mut pop = None;
+                println!("putting back: {}", node.borrow().token.unwrap());
+                std::mem::swap(&mut pop, &mut node.borrow_mut().token);
+                tokens.push(pop.unwrap());
+            }
+            Backtrack::Backtracked {
+                any_alternated: false,
+                erase_us: true,
+            }
         }
-        return Backtrack::NoOp;
+        else {
+            Backtrack::NoOp
+        };
     }
+    else {
+        let mut any = false;
+        let mut any_alternated = false;
+        let mut erase_us = false;
 
-    if node.borrow().children.is_empty() {
-        return Backtrack::NoOp;
-    }
+        {
+            let mut node_mut = node.borrow_mut();
+            let mut children = vec![];
+            std::mem::swap(&mut children, &mut node_mut.children);
 
-    println!("backtrack children");
-    let mut num_to_pop = 0;
-    let mut any_child_backtracked = false;
-    for c in node.borrow().children.iter().rev() {
-        if Backtrack::Backtracked == backtrack(c, tokens) {
-            println!("child backtracked");
-            any_child_backtracked = true;
-        } else {
-            num_to_pop += 1;
+            // println!(
+            //     "backtracking children of: {}@{}",
+            //     node_mut.rule_name(),
+            //     node_mut.step_no
+            // );
+            children.reverse();
+            for c in &children {
+                let backtrack_result = backtrack(c, tokens, step);
+                match backtrack_result {
+                    Backtrack::NoOp => {}
+                    Backtrack::Backtracked {
+                        any_alternated: aa,
+                        erase_us: eu,
+                    } => {
+                        any = true;
+                        any_alternated |= aa;
+                        erase_us |= eu;
+                    }
+                }
+            }
+
+            children.reverse();
+            std::mem::swap(&mut children, &mut node_mut.children);
+        }
+
+        if any {
+            if erase_us || !any_alternated {
+                let mut node_mut = node.borrow_mut();
+                let mut children_swap = vec![];
+                std::mem::swap(&mut children_swap, &mut node_mut.children);
+            }
+
+            let has_next = node.borrow().has_next_alt();
+
+            if any_alternated {
+                Backtrack::Backtracked {
+                    any_alternated: true,
+                    erase_us: false,
+                }
+            }
+            else if has_next {
+                println!("======================> hero: {}@{}", node.borrow().rule_name(), node.borrow().step_no);
+                node.borrow_mut().alternative_no += 1;
+                Backtrack::Backtracked {
+                    any_alternated: true,
+                    erase_us: false,
+                }
+            }
+            else {
+                Backtrack::Backtracked {
+                    any_alternated: false,
+                    erase_us: false,
+                }
+            }
+        }
+        // else if !node.borrow().has_next_alt() {
+        //     println!("no more alt: {}", node.borrow().rule_name());
+        //     (Backtrack::NoOp, false)
+        // }
+        // else if am_i_next {
+        // println!("!!! increasing alt of: {}@{}", node.borrow().rule_name(), node.borrow().step_no);
+        // if !node.borrow().children.is_empty() {
+        //     panic!("alternating but still has children");
+        // }
+        // node.borrow_mut().alternative_no += 1;
+        // (Backtrack::NoOp, false)
+        // }
+        else {
+            Backtrack::NoOp
         }
     }
-    for _ in 0..=num_to_pop {
-        node.borrow_mut().children.pop();
-    }
-    if any_child_backtracked {
-        return Backtrack::Backtracked;
-    }
-
-    if node.borrow().rule().borrow().sub_rules().unwrap().len() <= node.borrow().alternative_no {
-        println!("no more alt: {}", node.borrow().rule().borrow().name());
-        return Backtrack::NoOp;
-    }
-
-    node.borrow_mut().alternative_no += 1;
-    return Backtrack::Backtracked;
 }
 
-fn expand(node: &Rc<RefCell<Node>>) -> bool {
-    if node.borrow().rule().borrow().is_terminal() {
-        println!("focus is terminal");
-        return false;
+fn expand(node: &Rc<RefCell<Node>>, step_no: usize) -> bool {
+    return if node.borrow().is_terminal() {
+        false
     }
-
-    if !node.borrow().children.is_empty() {
+    else if !node.borrow().children.is_empty() {
         for child in &node.borrow().children {
-            if expand(child) {
+            if expand(child, step_no) {
                 return true;
             }
         }
-        return false;
+        false
     }
+    else {
+        let sub_rules = if node.borrow().is_alternative() {
+            node.borrow().rule().borrow().sub_rules().unwrap().clone()
+        }
+        else {
+            node.borrow().rules()
+        };
 
-    let node_borrow = node.borrow();
-    let rule = node_borrow.rule();
-    let rule_borrow = rule.borrow();
-    // let sub_rule: &Rc<RefCell<Rule>> = rule_borrow.sub_rules().unwrap().get(alt).unwrap();
-    let mut sub_nodes = rule_borrow
-        // .borrow()
-        .sub_rules()
-        .unwrap()
-        .iter()
-        .map(|it| Node::child(it))
-        .collect();
+        let mut sub_nodes = sub_rules
+            .iter()
+            .map(|it| Node::child(it, step_no as usize))
+            .collect();
 
-    println!("rule_borrow: {}", rule_borrow);
+        node.borrow_mut().children.append(&mut sub_nodes);
 
-    drop(rule_borrow);
-    drop(node_borrow);
+        true
+    };
+}
 
-    node.borrow_mut().children.append(&mut sub_nodes);
-
-    return true;
+fn expandable(node: &Rc<RefCell<Node>>) -> bool {
+    if node.borrow().is_terminal() {
+        false
+    }
+    else if !node.borrow().children.is_empty() {
+        for child in &node.borrow().children {
+            if expandable(child) {
+                return true;
+            }
+        }
+        false
+    }
+    else {
+        true
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -154,20 +257,19 @@ enum MatchingReady {
 fn is_matching_ready(node: &Rc<RefCell<Node>>) -> MatchingReady {
     let node = node.borrow();
 
-    if node.rule().borrow().is_terminal() {
+    if node.is_terminal() {
         return if node.token.is_none() {
             MatchingReady::Ready
-        } else {
+        }
+        else {
             MatchingReady::Neutral
         };
     }
 
     if node.children.is_empty() {
-        println!("================================ NO CHILDREN, need Expanding");
         return MatchingReady::NeedExpand;
     }
 
-    println!("with children: {} ////////////", node);
     for child in &node.children {
         match is_matching_ready(child) {
             MatchingReady::Ready => {
@@ -180,7 +282,6 @@ fn is_matching_ready(node: &Rc<RefCell<Node>>) -> MatchingReady {
         }
     }
 
-    println!("=======================================================================> Neutral");
     return MatchingReady::Neutral;
 }
 
@@ -195,34 +296,39 @@ pub fn parse_inefficiently(
     let mut parser = BacktrackingParser {
         tokens,
         tree: Node::root(&rules),
+        step_no: 0,
     };
 
     loop {
         if parser.tokens.last().is_some() {
-            println!("CURRENT :::: {}", &parser.tokens.last().unwrap());
+            println!(
+                "==================================\n \
+            CURRENT TOKEN :::: {}",
+                &parser.tokens.last().unwrap()
+            );
         }
-        println!("EXPANDING?");
+
         while !parser.is_matching_ready() {
-            println!("-------------------------------> EXPANDING");
+            // println!("no, it is not ready yet, -------------------------------> EXPANDING");
+            println!("BEFORE: {}", parser.tree.borrow());
             if !parser.expand() {
                 return Err("can not expand".to_string());
-            } else {
-                println!("expanded");
+            }
+            else {
+                println!("AFTER: {}", parser.tree.borrow());
             }
         }
-        println!("EXPANDING!");
 
-        println!(
-            "matches? {} {}",
-            parser.tree.borrow(),
-            &parser.tokens.last().unwrap()
-        );
+        println!("matches? {}", parser.tokens.last().unwrap());
         if !parser.match_next() {
-            println!("no match");
+            println!("no match, backtracking");
             if !parser.backtrack() {
+                println!("{}", parser.tree.borrow().rule().borrow());
                 return Err("can not backtrack".to_string());
             }
-        } else {
+            println!("BACKTRACKED: {}", parser.tree.borrow());
+        }
+        else {
             println!("MATCH");
         }
 

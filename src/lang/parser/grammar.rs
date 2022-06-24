@@ -15,21 +15,21 @@ args0           -> arg , args
 args1           -> arg
 arg             -> IDT IDT
 statements      -> statements0 | statements1
-statements0     -> statement , statements
+statements0     -> statement statements
 statements1     -> statement
 statement       -> declaration | assignment
 declaration     -> IDT IDT ;
-assignment      -> IDT = expression ;
-expression      -> expression0 | expression1 | expression2
-expression0     -> expression + term
-expression1     -> expression - term
-expression2     -> term
-term            -> term0 | term1 | term2
-term0           -> term * factor
-term1           -> term / factor
+assignment      -> IDT = expressions ;
+expressions     -> expression0 | expression1 | expression2
+expression0     -> terms + expressions
+expression1     -> terms - expressions
+expression2     -> terms
+terms           -> term0 | term1 | term2
+term0           -> factor * terms
+term1           -> factor / terms
 term2           -> factor
 factor          -> factor0 | factor1 | factor2
-factor0         -> ( expression )
+factor0         -> ( expressions )
 factor1         -> INT
 factor2         -> IDT
 
@@ -37,7 +37,7 @@ factor2         -> IDT
 
 pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let mut e_num = 0;
-    let mut expandable = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
+    let mut exp = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
         e_num += 1;
         Rc::new(RefCell::new(Rule::Expandable {
             name: name.to_string(),
@@ -48,10 +48,14 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let push = |into: &Rc<RefCell<Rule>>, item: &Rc<RefCell<Rule>>| match &mut *Rc::clone(into)
         .borrow_mut()
     {
-        Rule::Expandable { sub_rules: rules, .. } => {
+        Rule::Expandable {
+            sub_rules: rules, ..
+        } => {
             rules.push(Rc::clone(item));
         }
-        Rule::Alternative { sub_rules: rules, .. } => {
+        Rule::Alternative {
+            sub_rules: rules, ..
+        } => {
             rules.push(Rc::clone(item));
         }
         _ => panic!(),
@@ -64,7 +68,7 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     };
 
     let mut a_num = 0;
-    let mut alternative = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
+    let mut alt = move |name: &'static str, rules: Vec<Rc<RefCell<Rule>>>| {
         a_num += 1;
         Rc::new(RefCell::new(Rule::Alternative {
             name: name.to_string(),
@@ -88,26 +92,26 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let plus = TokenKind::Pls.to_rule();
     let minus = TokenKind::Min.to_rule();
 
-    let arg = expandable("arg", vec![Rc::clone(&identifier), Rc::clone(&identifier)]);
-    let args0 = expandable("args0", vec![Rc::clone(&arg), Rc::clone(&comma)]);
-    let args1 = expandable("args1", vec![Rc::clone(&arg)]);
-    let args = alternative("args", vec![Rc::clone(&args0), Rc::clone(&args1)]);
+    let arg = exp("arg", vec![Rc::clone(&identifier), Rc::clone(&identifier)]);
+    let args0 = exp("args0", vec![Rc::clone(&arg), Rc::clone(&comma)]);
+    let args1 = exp("args1", vec![Rc::clone(&arg)]);
+    let args = alt("args", vec![Rc::clone(&args0), Rc::clone(&args1)]);
     push(&args0, &args);
 
     // -----------------------------
 
-    let term0 = expandable("term0", vec![]);
-    let term1 = expandable("term1", vec![]);
-    let term2 = expandable("term2", vec![]);
-    let term = alternative(
-        "term",
+    let term0 = exp("term0", vec![]);
+    let term1 = exp("term1", vec![]);
+    let term2 = exp("term2", vec![]);
+    let terms = alt(
+        "terms",
         vec![Rc::clone(&term0), Rc::clone(&term1), Rc::clone(&term2)],
     );
 
-    let factor0 = expandable("factor0", vec![]);
-    let factor1 = expandable("factor1", vec![Rc::clone(&int)]);
-    let factor2 = expandable("factor2", vec![Rc::clone(&identifier)]);
-    let factor = alternative(
+    let factor0 = exp("factor0", vec![]);
+    let factor1 = exp("factor1", vec![Rc::clone(&int)]);
+    let factor2 = exp("factor2", vec![Rc::clone(&identifier)]);
+    let factor = alt(
         "factor",
         vec![
             Rc::clone(&factor0),
@@ -116,11 +120,11 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         ],
     );
 
-    let expression0 = expandable("expression0", vec![]);
-    let expression1 = expandable("expression1", vec![]);
-    let expression2 = expandable("expression2", vec![Rc::clone(&term)]);
-    let expression = alternative(
-        "expression",
+    let expression0 = exp("expression0", vec![]);
+    let expression1 = exp("expression1", vec![]);
+    let expression2 = exp("expression2", vec![Rc::clone(&terms)]);
+    let expressions = alt(
+        "expressions",
         vec![
             Rc::clone(&expression0),
             Rc::clone(&expression1),
@@ -128,17 +132,17 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         ],
     );
 
-    push_all(&expression0, vec![&expression, &plus, &term]);
-    push_all(&expression1, vec![&expression, &minus, &term]);
+    push_all(&expression0, vec![&terms, &plus, &expressions]);
+    push_all(&expression1, vec![&terms, &minus, &expressions]);
 
-    push_all(&factor0, vec![&lpr, &expression, &rpr]);
-    push_all(&term0, vec![&term, &mul, &factor]);
-    push_all(&term1, vec![&term, &div, &factor]);
+    push_all(&factor0, vec![&lpr, &expressions, &rpr]);
+    push_all(&term0, vec![&factor, &mul, &terms]);
+    push_all(&term1, vec![&factor, &div, &terms]);
     push_all(&term2, vec![&factor]);
 
     // -----------------------------
 
-    let declaration = expandable(
+    let declaration = exp(
         "declaration",
         vec![
             Rc::clone(&identifier),
@@ -146,31 +150,34 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
             Rc::clone(&semi),
         ],
     );
-    let assignment = expandable(
+    let assignment = exp(
         "assignment",
         vec![
             Rc::clone(&identifier),
             Rc::clone(&equ),
-            Rc::clone(&expression),
+            Rc::clone(&expressions),
             Rc::clone(&semi),
         ],
     );
-    let statement = alternative(
+
+    // -----------------------------
+
+    let statement = alt(
         "statement",
         vec![Rc::clone(&declaration), Rc::clone(&assignment)],
     );
-    let statements0 = expandable(
-        "statements0",
-        vec![Rc::clone(&statement), Rc::clone(&comma)],
-    );
-    let statements1 = expandable("statements1", vec![Rc::clone(&statement)]);
-    let statements = alternative(
+
+    let statements0 = exp("statements0", vec![Rc::clone(&statement)]);
+    let statements1 = exp("statements1", vec![Rc::clone(&statement)]);
+    let statements = alt(
         "statements",
         vec![Rc::clone(&statements0), Rc::clone(&statements1)],
     );
     push(&statements0, &statements);
 
-    let fn_declaration = expandable(
+    // -----------------------------
+
+    let fn_declaration = exp(
         "fn_declaration",
         vec![
             fun,
@@ -184,7 +191,7 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         ],
     );
 
-    let fn_call = expandable(
+    let fn_call = exp(
         "fn_call",
         vec![
             Rc::clone(&identifier),
@@ -195,5 +202,5 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         ],
     );
 
-    alternative("S", vec![fn_call, fn_declaration])
+    alt("S", vec![fn_call, fn_declaration])
 }

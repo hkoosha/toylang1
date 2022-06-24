@@ -1,4 +1,4 @@
-pub mod grammar;
-pub mod rule;
-pub mod parse_tree;
 mod dead;
+pub mod grammar;
+pub mod parse_tree;
+pub mod rule;

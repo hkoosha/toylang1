@@ -48,7 +48,11 @@ impl Rule {
     }
 
     pub fn is_alternative(&self) -> bool {
-        matches!(self, Rule::Alternative{..})
+        matches!(self, Rule::Alternative { .. })
+    }
+
+    pub fn is_expandable(&self) -> bool {
+        matches!(self, Rule::Expandable { .. })
     }
 
     pub fn is_non_terminal(&self) -> bool {
@@ -60,6 +64,10 @@ impl Rule {
             Rule::Terminal(terminal) => terminal == token_kind,
             _ => panic!("expecting a terminal"),
         }
+    }
+
+    pub fn has_next(&self, alt: usize) -> bool {
+        return self.sub_rules().is_some() && self.sub_rules().unwrap().get(alt).is_some()
     }
 }
 
