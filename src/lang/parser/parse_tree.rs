@@ -10,8 +10,9 @@ pub struct Node<'a> {
     pub alternative_no: usize,
     pub token: Option<Token<'a>>,
     pub children: Vec<Rc<RefCell<Node<'a>>>>,
-    pub expanded: bool,
+    pub parent: Option<Rc<RefCell<Node<'a>>>>,
     pub step_no: usize,
+    pub is_focus: bool,
 }
 
 impl<'a> Node<'a> {
@@ -21,20 +22,26 @@ impl<'a> Node<'a> {
             token: None,
             children: vec![],
             alternative_no: 0,
-            expanded: false,
+            parent: None,
             step_no: 0,
+            is_focus: false,
         };
         Rc::new(RefCell::new(this))
     }
 
-    pub fn child(rule: &Rc<RefCell<Rule>>, step_no: usize) -> Rc<RefCell<Self>> {
+    pub fn child(
+        rule: &Rc<RefCell<Rule>>,
+        parent: &Rc<RefCell<Node<'a>>>,
+        step_no: usize,
+    ) -> Rc<RefCell<Self>> {
         let this = Self {
             rule: Rc::clone(rule),
             token: None,
             children: vec![],
             alternative_no: 0,
-            expanded: false,
+            parent: Some(Rc::clone(parent)),
             step_no,
+            is_focus: false,
         };
         Rc::new(RefCell::new(this))
     }
@@ -54,13 +61,14 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub fn rule(&self) -> Rc<RefCell<Rule>> {
+    pub fn alt_current_rule(&self) -> Rc<RefCell<Rule>> {
         if self.rule.borrow().is_terminal() {
-            return Rc::clone(&self.rule);
+            panic!("is terminal");
         }
         if !self.rule.borrow().is_alternative() {
             panic!("is expandable");
         }
+
         Rc::clone(
             self.rule
                 .borrow()
@@ -75,7 +83,14 @@ impl<'a> Node<'a> {
         )
     }
 
-    pub fn rules(&self) -> Vec<Rc<RefCell<Rule>>> {
+    pub fn terminal_rule(&self) -> Rc<RefCell<Rule>> {
+        if self.rule.borrow().is_terminal() {
+            return Rc::clone(&self.rule);
+        }
+        panic!("not a terminal: {}", self);
+    }
+
+    pub fn expandable_rules(&self) -> Vec<Rc<RefCell<Rule>>> {
         match &*self.rule.borrow() {
             Rule::Terminal(_) => panic!("is terminal, not expandable"),
             Rule::Alternative { .. } => panic!("is alternative, not expandable"),
@@ -127,44 +142,38 @@ impl<'a> Node<'a> {
     }
 }
 
-pub fn left_most_expandable<'a>(node: &Rc<RefCell<Node<'a>>>) -> Option<Rc<RefCell<Node<'a>>>> {
-    if node.borrow().children.is_empty() {
-        return if node.borrow().rule().borrow().is_non_terminal() {
-            Some(Rc::clone(node))
-        }
-        else {
-            None
-        };
-    }
-    else {
-        for c in &node.borrow().children {
-            let node = left_most_expandable(c);
-            if node.is_some() {
-                return node;
-            }
-        }
-    }
+pub fn ensure_parent_sane(node: &Rc<RefCell<Node>>) {
+    let nb = node.borrow();
 
-    None
+    for c in &nb.children {
+        let cb = c.borrow();
+        if cb.parent.is_none() {
+            panic!("child has no parent, me={} child={}", nb, cb);
+        }
+        if !are_eq(node, cb.parent.as_ref().unwrap()) {
+            panic!(
+                "child does not declare me as parent,\nme={}\nchild={}\ndeclared_parent={:?}",
+                nb, cb, cb.parent
+            );
+        }
+        ensure_parent_sane(c);
+    }
 }
 
-pub fn left_most_empty_terminal<'a>(node: &Rc<RefCell<Node<'a>>>) -> Option<Rc<RefCell<Node<'a>>>> {
-    if node.borrow().token.is_some() {
-        return None;
-    }
+pub fn are_eq<'a>(this: &Rc<RefCell<Node<'a>>>, other: &Rc<RefCell<Node<'a>>>) -> bool {
+    this.borrow().step_no == other.borrow().step_no
+        && this.borrow().rule_name() == other.borrow().rule_name()
+        && this.borrow().alternative_no == other.borrow().alternative_no
+        && this.borrow().token.is_some() == other.borrow().token.is_some()
+}
 
-    if node.borrow().is_terminal() {
-        return Some(Rc::clone(node));
+pub fn root_of<'a>(node: &Rc<RefCell<Node<'a>>>) -> Rc<RefCell<Node<'a>>> {
+    if node.borrow().parent.is_some() {
+        root_of(node.borrow().parent.as_ref().unwrap())
     }
-
-    for c in &node.borrow().children {
-        let node = left_most_empty_terminal(c);
-        if node.is_some() {
-            return node;
-        }
+    else {
+        Rc::clone(node)
     }
-
-    None
 }
 
 impl<'a> Display for Node<'a> {
@@ -173,7 +182,7 @@ impl<'a> Display for Node<'a> {
 
         result.push('\n');
         result.push_str(&self.rule_name());
-        result.push('@');
+        result.push('#');
         result.push_str(&self.step_no.to_string());
 
         for n in &self.children {
@@ -198,8 +207,9 @@ fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
     }
 
     result.push_str(&node.borrow().rule_name());
-    result.push('@');
+    result.push('#');
     result.push_str(&node.borrow().step_no.to_string());
+
     if node.borrow().token.is_some() {
         result.push_str("  [");
         result.push_str(&node.borrow().token.unwrap().text);
@@ -213,13 +223,13 @@ fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
 
 pub fn sample(rule: &Rc<RefCell<Rule>>) {
     let node0 = Node::root(&Rc::clone(&rule));
-    let node1 = Node::child(&Rc::clone(&rule), 0);
-    let node2 = Node::child(&Rc::clone(&rule), 0);
-    let node3 = Node::child(&Rc::clone(&rule), 0);
-    let node4 = Node::child(&Rc::clone(&rule), 0);
-    let node5 = Node::child(&Rc::clone(&rule), 0);
-    let node6 = Node::child(&Rc::clone(&rule), 0);
-    let node7 = Node::child(&Rc::clone(&rule), 0);
+    let node1 = Node::child(&Rc::clone(&rule), &node0, 0);
+    let node2 = Node::child(&Rc::clone(&rule), &node1, 0);
+    let node3 = Node::child(&Rc::clone(&rule), &node2, 0);
+    let node4 = Node::child(&Rc::clone(&rule), &node2, 0);
+    let node5 = Node::child(&Rc::clone(&rule), &node0, 0);
+    let node6 = Node::child(&Rc::clone(&rule), &node5, 0);
+    let node7 = Node::child(&Rc::clone(&rule), &node5, 0);
 
     node2.borrow_mut().children.push(node3);
     node2.borrow_mut().children.push(node4);

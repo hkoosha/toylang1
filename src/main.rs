@@ -13,9 +13,11 @@ fn main() -> Result<(), String> {
     fn my_thing42(int j) {
          x1 = 1 * 30;\
          x2 = x3 / 10;\
-         int y = x4 + 2;\
+         int y;\
+         y = x4 + 2;\
          print(\"foo\\\"bar some thing\");\
-         int z = x5 * y;\
+         int z;\
+         z = x5 * y;\
          int x0;\
     }";
 
