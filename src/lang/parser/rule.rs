@@ -1,9 +1,12 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
 
+#[derive(Eq)]
 pub enum Rule {
     Terminal(TokenKind),
     Expandable {
@@ -67,7 +70,7 @@ impl Rule {
     }
 
     pub fn has_next(&self, alt: usize) -> bool {
-        return self.sub_rules().is_some() && self.sub_rules().unwrap().get(alt).is_some()
+        return self.sub_rules().is_some() && self.sub_rules().unwrap().get(alt).is_some();
     }
 }
 
@@ -100,7 +103,82 @@ impl Display for Rule {
 
 impl Debug for Rule {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", format!("{}", self))
+        write!(f, "{}", self)
+    }
+}
+
+impl Hash for Rule {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match &self {
+            Rule::Terminal(t) => {
+                t.hash(state);
+            }
+            Rule::Expandable { name, num, .. } => {
+                state.write_usize(*num);
+                name.hash(state);
+                "expandable".hash(state);
+            }
+            Rule::Alternative { name, num, .. } => {
+                state.write_usize(*num);
+                name.hash(state);
+                "alternative".hash(state);
+            }
+        }
+    }
+}
+
+impl PartialEq for Rule {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Rule::Terminal(st) => match other {
+                Rule::Terminal(ot) => *st == *ot,
+                _ => false,
+            },
+            Rule::Expandable { name, num, .. } => match other {
+                Rule::Terminal(_) => false,
+                Rule::Expandable {
+                    name: o_name,
+                    num: o_num,
+                    ..
+                } => *name == *o_name && *num == *o_num,
+                Rule::Alternative { .. } => false,
+            },
+            Rule::Alternative { name, num, .. } => match other {
+                Rule::Terminal(_) => false,
+                Rule::Expandable { .. } => false,
+                Rule::Alternative {
+                    name: o_name,
+                    num: o_num,
+                    ..
+                } => *name == *o_name && *num == *o_num,
+            },
+        }
+    }
+}
+
+impl Clone for Rule {
+    fn clone(&self) -> Self {
+        match self {
+            Rule::Terminal(t) => Self::Terminal(*t),
+            Rule::Expandable {
+                name,
+                num,
+                sub_rules,
+            } => Self::Expandable {
+                name: name.clone(),
+                num: *num,
+                sub_rules: sub_rules.clone(),
+            },
+            Rule::Alternative {
+                name,
+                num,
+                sub_rules,
+            } => Self::Alternative {
+                name: name.clone(),
+                num: *num,
+                sub_rules: sub_rules.clone(),
+            },
+        }
     }
 }
 
@@ -274,5 +352,77 @@ pub trait ToRule {
 impl ToRule for TokenKind {
     fn to_rule(self) -> Rc<RefCell<Rule>> {
         Rc::new(RefCell::new(Rule::Terminal(self)))
+    }
+}
+
+pub fn eliminate_left_recursion(root: Rc<RefCell<Rule>>) -> Rc<RefCell<Rule>> {
+    let mut map = HashMap::new();
+    let mut numbers = HashMap::new();
+    to_map(&root, &mut map, &mut numbers, &mut 0);
+
+    for (name, rule) in &map {
+        if rule.is_terminal() {
+            continue;
+        }
+
+        let rule_num = numbers[name];
+
+        loop {
+            if rule.is_expandable() {
+                let first = rule.sub_rules().unwrap().get(0).unwrap();
+                if first.borrow().is_non_terminal() && numbers[&first.borrow().name()] < rule_num {
+                    panic!("kill me");
+                }
+            }
+            else {
+                for sub_rule in rule.sub_rules().unwrap() {
+                    match &*sub_rule.borrow() {
+                        Rule::Terminal(_) => {}
+                        Rule::Expandable { .. } => {}
+                        Rule::Alternative { .. } => {}
+                    }
+                }
+            }
+        }
+    }
+    todo!()
+}
+
+fn to_map(
+    rule: &Rc<RefCell<Rule>>,
+    map: &mut HashMap<String, Rule>,
+    numbers: &mut HashMap<String, usize>,
+    carry: &mut usize,
+) {
+    match &*rule.borrow() {
+        Rule::Terminal(t) => {
+            if !numbers.contains_key(t.name()) {
+                map.insert(t.name().to_string(), rule.borrow().clone());
+                numbers.insert(t.name().to_string(), *carry);
+                *carry += 1;
+            }
+        }
+        Rule::Expandable {
+            name, sub_rules, ..
+        } => {
+            if map.insert(name.clone(), rule.borrow().clone()) == None {
+                numbers.insert(name.clone(), *carry);
+                *carry += 1;
+                for r in sub_rules {
+                    to_map(r, map, numbers, carry);
+                }
+            }
+        }
+        Rule::Alternative {
+            name, sub_rules, ..
+        } => {
+            if map.insert(name.clone(), rule.borrow().clone()) == None {
+                numbers.insert(name.clone(), *carry);
+                *carry += 1;
+                for r in sub_rules {
+                    to_map(r, map, numbers, carry);
+                }
+            }
+        }
     }
 }

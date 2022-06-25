@@ -60,11 +60,13 @@ impl<'a> Node<'a> {
                 .sub_rules()
                 .expect("no sub rule")
                 .get(self.alternative_no)
-                .expect(&format!(
-                    "no such alternative={} on node={}",
-                    self.alternative_no,
-                    self.rule.borrow().name()
-                )),
+                .unwrap_or_else(|| {
+                    panic!(
+                        "no such alternative={} on node={}",
+                        self.alternative_no,
+                        self.rule.borrow().name()
+                    )
+                }),
         )
     }
 
@@ -92,17 +94,11 @@ impl<'a> Node<'a> {
     }
 
     pub fn is_terminal(&self) -> bool {
-        match &*self.rule.borrow() {
-            Rule::Terminal(_) => true,
-            _ => false,
-        }
+        matches!(&*self.rule.borrow(), Rule::Terminal(_))
     }
 
     pub fn is_expandable(&self) -> bool {
-        match &*self.rule.borrow() {
-            Rule::Expandable { .. } => true,
-            _ => false,
-        }
+        matches!(&*self.rule.borrow(), Rule::Expandable { .. })
     }
 
     pub fn has_next_alt(&self) -> bool {
@@ -173,7 +169,7 @@ impl<'a> Display for Node<'a> {
 
 impl<'a> Debug for Node<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", format!("{}", self))
+        write!(f, "{}", self)
     }
 }
 
@@ -197,7 +193,7 @@ fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
 
     if node.borrow().token.is_some() {
         result.push_str("  [");
-        result.push_str(&node.borrow().token.unwrap().text);
+        result.push_str(node.borrow().token.unwrap().text);
         result.push(']');
     }
 

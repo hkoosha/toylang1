@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     Err,
     Eof,

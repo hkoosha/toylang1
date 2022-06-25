@@ -5,6 +5,7 @@ use pretty_env_logger::formatted_builder;
 
 use toylang::lang::lexer::Lexer;
 use toylang::lang::parser::grammar::toylang_v0_rules;
+use toylang::lang::parser::rule::eliminate_left_recursion;
 use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
 
 fn main() -> Result<(), String> {
@@ -39,6 +40,8 @@ fn main() -> Result<(), String> {
     info!("program: \n\n{}\n", program);
     info!("grammar: \n{}\n", r.borrow());
     info!("tree: \n{}\n", tree.borrow());
+
+    eliminate_left_recursion(r);
 
     Ok(())
 }

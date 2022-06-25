@@ -39,9 +39,9 @@ impl<'a> BacktrackingParser<'a> {
 
         self.print_stack("before sub nodes");
         (&sub_nodes)
-            .into_iter()
+            .iter()
             .rev()
-            .map(|it| Rc::clone(it))
+            .map(Rc::clone)
             .for_each(|it| self.stack.push(it));
         self.print_stack("after sub nodes");
 
