@@ -10,7 +10,7 @@ use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
     builder.parse_filters("INFO");
-    builder.try_init().unwrap();
+    builder.try_init().expect("logger failed to initialize");
 
     let program = "\
     fn my_thing42(int j) {
@@ -36,8 +36,9 @@ fn main() -> Result<(), String> {
 
     let tree = parse_inefficiently(tokens, Rc::clone(&r))?;
 
-    info!("grammar: {}", r.borrow());
-    info!("tree: {}", tree.borrow());
+    info!("program: \n\n{}\n", program);
+    info!("grammar: \n{}\n", r.borrow());
+    info!("tree: \n{}\n", tree.borrow());
 
     Ok(())
 }

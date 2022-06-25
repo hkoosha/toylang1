@@ -348,7 +348,12 @@ impl<'a> Iterator for LexerIter<'a> {
         }
 
         return match self.lexer.read_token() {
-            Ok(v) => v.map(Ok),
+            Ok(v) => {
+                if v.is_none() {
+                    self.iter_finished = true;
+                }
+                v.map(Ok)
+            }
             Err(err) => {
                 self.iter_finished = true;
                 Some(Err(err))
