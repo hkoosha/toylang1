@@ -199,6 +199,13 @@ impl<'a> Debug for Node<'a> {
     }
 }
 
+impl<'a> Drop for Node<'a> {
+    fn drop(&mut self) {
+        self.parent = None;
+        self.children.clear();
+    }
+}
+
 fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
     result.push('\n');
 
