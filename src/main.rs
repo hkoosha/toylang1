@@ -15,8 +15,8 @@ fn main() -> Result<(), String> {
          x2 = x3 / 10;\
          int y;\
          y = x4 + 2;\
-         print(\"foo\\\"bar some thing\");\
          int z;\
+         print(\"foo\\\"bar some thing\");\
          z = x5 * y;\
          int x0;\
     }";
