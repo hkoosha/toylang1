@@ -1,4 +1,5 @@
 use std::rc::Rc;
+
 use log::info;
 use pretty_env_logger::formatted_builder;
 
@@ -23,11 +24,9 @@ fn main() -> Result<(), String> {
          int x0;\
     }";
 
-
     let mut tokens = vec![];
     for token in Lexer::new(program) {
         let token = token?;
-        // info!("token, {}: {}", token.token_kind.name(), token.text);
         tokens.push(token)
     }
 
