@@ -4,7 +4,7 @@ use std::rc::Rc;
 use log::trace;
 
 use crate::lang::lexer::token::Token;
-use crate::lang::parser::parse_tree::{ensure_parent_sane, root_of, Node};
+use crate::lang::parser::node::{ensure_parent_sane, root_of, Node};
 use crate::lang::parser::rule::Rule;
 
 struct BacktrackingParser<'a> {
@@ -27,22 +27,8 @@ impl<'a> BacktrackingParser<'a> {
             self.focus.borrow().expandable_rules()
         }
         else {
-            // if self.focus.borrow().rule().borrow().sub_rules().is_none() {
             vec![self.focus.borrow().alt_current_rule()]
         };
-        // else {
-        //     trace!(
-        //         "=======================> EXP: {} => ",
-        //         self.focus.borrow().rule().borrow().name(),
-        //     );
-        //     self.focus
-        //         .borrow()
-        //         .rule()
-        //         .borrow()
-        //         .sub_rules()
-        //         .unwrap()
-        //         .clone()
-        // };
 
         let mut sub_nodes: Vec<Rc<RefCell<Node>>> = sub_rules
             .iter()
@@ -179,8 +165,6 @@ pub fn parse_inefficiently(
     mut tokens: Vec<Token>,
     rules: Rc<RefCell<Rule>>,
 ) -> Result<Rc<RefCell<Node>>, String> {
-    // crate::lang::parser::parse_tree::sample(&rules);
-
     tokens.reverse();
 
     let root = Node::root(&rules);

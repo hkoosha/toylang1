@@ -9,7 +9,7 @@ use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
 
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
-    builder.parse_filters("TRACE");
+    builder.parse_filters("DEBUG");
     builder.try_init().unwrap();
 
     let program = "\

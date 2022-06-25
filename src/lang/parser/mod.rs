@@ -1,3 +1,3 @@
 pub mod grammar;
-pub mod parse_tree;
+pub mod node;
 pub mod rule;

@@ -46,21 +46,6 @@ impl<'a> Node<'a> {
         Rc::new(RefCell::new(this))
     }
 
-    pub fn is_sane(&self) -> Result<(), &'static str> {
-        if self.token.is_some() && !self.children.is_empty() {
-            Err("intermediate nodes can not have a token")
-        }
-        else {
-            Ok(())
-        }
-    }
-
-    pub fn ensure_sane(&self) {
-        if let Err(msg) = self.is_sane() {
-            panic!("{}", msg);
-        }
-    }
-
     pub fn alt_current_rule(&self) -> Rc<RefCell<Rule>> {
         if self.rule.borrow().is_terminal() {
             panic!("is terminal");
@@ -116,13 +101,6 @@ impl<'a> Node<'a> {
     pub fn is_expandable(&self) -> bool {
         match &*self.rule.borrow() {
             Rule::Expandable { .. } => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_alternative(&self) -> bool {
-        match &*self.rule.borrow() {
-            Rule::Alternative { .. } => true,
             _ => false,
         }
     }
@@ -226,25 +204,4 @@ fn display_node(node: &Rc<RefCell<Node>>, result: &mut String, level: usize) {
     for n in &node.borrow().children {
         display_node(n, result, level + 1);
     }
-}
-
-pub fn sample(rule: &Rc<RefCell<Rule>>) {
-    let node0 = Node::root(&Rc::clone(&rule));
-    let node1 = Node::child(&Rc::clone(&rule), &node0, 0);
-    let node2 = Node::child(&Rc::clone(&rule), &node1, 0);
-    let node3 = Node::child(&Rc::clone(&rule), &node2, 0);
-    let node4 = Node::child(&Rc::clone(&rule), &node2, 0);
-    let node5 = Node::child(&Rc::clone(&rule), &node0, 0);
-    let node6 = Node::child(&Rc::clone(&rule), &node5, 0);
-    let node7 = Node::child(&Rc::clone(&rule), &node5, 0);
-
-    node2.borrow_mut().children.push(node3);
-    node2.borrow_mut().children.push(node4);
-    node1.borrow_mut().children.push(node2);
-    node0.borrow_mut().children.push(node1);
-    node5.borrow_mut().children.push(node6);
-    node5.borrow_mut().children.push(node7);
-    node0.borrow_mut().children.push(node5);
-
-    println!("sample: {}", node0.borrow());
 }
