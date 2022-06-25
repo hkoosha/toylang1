@@ -103,7 +103,7 @@ fn backtrack<'a>(
         return if is_my_step {
             if node.borrow().token.is_some() {
                 let mut pop = None;
-                println!("putting back: {}", node.borrow().token.unwrap());
+                println!("putting back: {}", node.borrow().token.unwrap().text);
                 std::mem::swap(&mut pop, &mut node.borrow_mut().token);
                 tokens.push(pop.unwrap());
             }
@@ -167,7 +167,6 @@ fn backtrack<'a>(
                 }
             }
             else if has_next {
-                println!("======================> hero: {}@{}", node.borrow().rule_name(), node.borrow().step_no);
                 node.borrow_mut().alternative_no += 1;
                 Backtrack::Backtracked {
                     any_alternated: true,
@@ -213,7 +212,12 @@ fn expand(node: &Rc<RefCell<Node>>, step_no: usize) -> bool {
     }
     else {
         let sub_rules = if node.borrow().is_alternative() {
-            node.borrow().rule().borrow().sub_rules().unwrap().clone()
+            if node.borrow().rule().borrow().sub_rules().is_none() {
+                vec![node.borrow().rule()]
+            }
+            else {
+                node.borrow().rule().borrow().sub_rules().unwrap().clone()
+            }
         }
         else {
             node.borrow().rules()
@@ -302,15 +306,13 @@ pub fn parse_inefficiently(
     loop {
         if parser.tokens.last().is_some() {
             println!(
-                "==================================\n \
+                "\n=========================================================================\n\
             CURRENT TOKEN :::: {}",
                 &parser.tokens.last().unwrap()
             );
         }
 
         while !parser.is_matching_ready() {
-            // println!("no, it is not ready yet, -------------------------------> EXPANDING");
-            println!("BEFORE: {}", parser.tree.borrow());
             if !parser.expand() {
                 return Err("can not expand".to_string());
             }
@@ -319,14 +321,12 @@ pub fn parse_inefficiently(
             }
         }
 
-        println!("matches? {}", parser.tokens.last().unwrap());
         if !parser.match_next() {
             println!("no match, backtracking");
             if !parser.backtrack() {
                 println!("{}", parser.tree.borrow().rule().borrow());
                 return Err("can not backtrack".to_string());
             }
-            println!("BACKTRACKED: {}", parser.tree.borrow());
         }
         else {
             println!("MATCH");

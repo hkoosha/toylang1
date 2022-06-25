@@ -11,13 +11,14 @@ fn main() -> Result<(), String> {
 
     let program = "\
     fn my_thing42(int j) {
-         int x0;\
-         x0 = 1 * 30;\
-         x0 = x0 / 10;\
-         int y = x0 + 2;\
+         x1 = 1 * 30;\
+         x2 = x3 / 10;\
+         int y = x4 + 2;\
          print(\"foo\\\"bar some thing\");\
-         int z = x0 * y;\
+         int z = x5 * y;\
+         int x0;\
     }";
+
 
     let mut tokens = vec![];
     for token in Lexer::new(program) {
