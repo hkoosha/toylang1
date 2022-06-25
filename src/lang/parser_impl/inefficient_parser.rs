@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use log::trace;
+
 use crate::lang::lexer::token::Token;
 use crate::lang::parser::parse_tree::{ensure_parent_sane, root_of, Node};
 use crate::lang::parser::rule::Rule;
@@ -29,7 +31,7 @@ impl<'a> BacktrackingParser<'a> {
             vec![self.focus.borrow().alt_current_rule()]
         };
         // else {
-        //     println!(
+        //     trace!(
         //         "=======================> EXP: {} => ",
         //         self.focus.borrow().rule().borrow().name(),
         //     );
@@ -68,7 +70,7 @@ impl<'a> BacktrackingParser<'a> {
     }
 
     fn match_next(&mut self) -> bool {
-        println!(
+        trace!(
             "matches? {} => {}",
             self.focus.borrow().rule_name(),
             self.tokens.last().unwrap().text
@@ -97,7 +99,7 @@ impl<'a> BacktrackingParser<'a> {
     fn backtrack(&mut self) -> Backtrack {
         assert!(self.focus.borrow().children.is_empty(), "has no children");
 
-        println!("BACK: {}", self.focus.borrow().rule_name());
+        trace!("BACK: {}", self.focus.borrow().rule_name());
 
         if self.focus.borrow().parent.as_ref().is_none() {
             return Backtrack::Fin;
@@ -121,17 +123,20 @@ impl<'a> BacktrackingParser<'a> {
     }
 
     fn print_stack(&self, tag: &'static str) {
-        print!("===> stack {}:", tag);
+        let mut values = String::new();
         (&self.stack)
             .iter()
             .map(|it| it.borrow().rule_name())
-            .for_each(|it| print!(" {}", it));
-        println!();
+            .for_each(|it| {
+                values.push(' ');
+                values.push_str(&it);
+            });
+        trace!("===> stack {}: {}", tag, values);
     }
 }
 
 fn disconnect<'a>(parser: &mut BacktrackingParser<'a>, node: &Rc<RefCell<Node<'a>>>) {
-    println!("dis: {}", node.borrow());
+    trace!("dis: {}", node.borrow());
 
     node.borrow_mut().children.reverse();
 
@@ -139,20 +144,20 @@ fn disconnect<'a>(parser: &mut BacktrackingParser<'a>, node: &Rc<RefCell<Node<'a
         disconnect(parser, child);
     }
 
-    println!("I am {}", node.borrow());
+    trace!("I am {}", node.borrow());
     if !node.borrow().is_focus && node.borrow().is_terminal() && node.borrow().token.is_some() {
         let mut pop = None;
-        println!("putting back: {}", node.borrow().token.unwrap().text);
+        trace!("putting back: {}", node.borrow().token.unwrap().text);
         std::mem::swap(&mut pop, &mut node.borrow_mut().token);
         parser.tokens.push(pop.unwrap());
     }
     else if !node.borrow().is_focus && node.borrow().children.is_empty() {
-        println!(
+        trace!(
             "I am popper: {} - {}",
             node.borrow(),
             node.borrow().is_focus
         );
-        println!(
+        trace!(
             "{} / {}",
             node.borrow().parent.as_ref().unwrap().borrow().is_focus,
             node.borrow().is_focus
@@ -190,7 +195,7 @@ pub fn parse_inefficiently(
         ensure_parent_sane(&root_of(&parser.focus));
 
         if parser.tokens.last().is_some() {
-            println!(
+            trace!(
                 "\n=========================================================================\n\
             CURRENT TOKEN :::: {}",
                 &parser.tokens.last().unwrap()
@@ -200,7 +205,7 @@ pub fn parse_inefficiently(
         while !parser.focus.borrow().is_terminal() {
             parser.expand();
             ensure_parent_sane(&root_of(&parser.focus));
-            println!("expanded: {}", root_of(&parser.focus).borrow());
+            trace!("expanded: {}", root_of(&parser.focus).borrow());
         }
 
         if parser.stack.is_empty() && parser.tokens.is_empty() {
@@ -208,24 +213,24 @@ pub fn parse_inefficiently(
         }
 
         if parser.match_next() {
-            println!("MATCH");
+            trace!("MATCH");
         }
         else {
             loop {
                 match parser.backtrack() {
                     Backtrack::Yes => {
-                        println!("backtracked: {}", root_of(&parser.focus).borrow());
-                        println!("backtracked focus: {}", parser.focus.borrow());
+                        trace!("backtracked: {}", root_of(&parser.focus).borrow());
+                        trace!("backtracked focus: {}", parser.focus.borrow());
                         parser.print_stack("backtracked");
                         ensure_parent_sane(&root_of(&parser.focus));
                         break;
                     }
                     Backtrack::No => {
-                        println!("backtracked: {}", root_of(&parser.focus).borrow());
+                        trace!("backtracked: {}", root_of(&parser.focus).borrow());
                     }
                     Backtrack::Fin => return Err("can not backtrack".to_string()),
                 }
-                println!("backtracked: {}", root_of(&parser.focus).borrow());
+                trace!("backtracked: {}", root_of(&parser.focus).borrow());
                 ensure_parent_sane(&root_of(&parser.focus));
             }
         }

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+use log::info;
 use pretty_env_logger::formatted_builder;
 
 use toylang::lang::lexer::Lexer;
@@ -30,9 +32,11 @@ fn main() -> Result<(), String> {
     }
 
     let r = toylang_v0_rules();
-    // info!("grammar: {}", *r.borrow());
 
-    parse_inefficiently(tokens, r)?;
+    let tree = parse_inefficiently(tokens, Rc::clone(&r))?;
+
+    info!("grammar: {}", r.borrow());
+    info!("tree: {}", tree.borrow());
 
     Ok(())
 }
