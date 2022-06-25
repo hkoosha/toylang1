@@ -18,7 +18,7 @@ params0         -> param , params
 param           -> IDT IDT
 statements      -> statements0 | statement
 statements0     -> statement statements
-statement       -> declaration | assignment | fn_call
+statement       -> declaration | assignment | fn_call | return
 declaration     -> IDT IDT ;
 assignment      -> IDT = expressions ;
 expressions     -> expression0 | expression1 | terms
@@ -29,6 +29,7 @@ term0           -> factor * terms
 term1           -> factor / terms
 factor          -> factor0 | INT | IDT
 factor0         -> ( expressions )
+return          -> RET expressions;
 
 ";
 
@@ -89,6 +90,7 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let plus = TokenKind::Pls.to_rule();
     let minus = TokenKind::Min.to_rule();
     let text = TokenKind::Str.to_rule();
+    let ret_token = TokenKind::Ret.to_rule();
 
     let param = exp("param", vec![&identifier, &identifier]);
     let params0 = exp("params0", vec![&param, &comma]);
@@ -113,12 +115,15 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
     let factor0 = exp("factor0", vec![]);
     let factor = alt("factor", vec![&factor0, &int, &identifier]);
 
+    let ret = exp("return", vec![&ret_token]);
+
     let expression0 = exp("expression0", vec![]);
     let expression1 = exp("expression1", vec![]);
     let expressions = alt("expressions", vec![&expression0, &expression1, &terms]);
 
     push_all(&expression0, vec![&terms, &plus, &expressions]);
     push_all(&expression1, vec![&terms, &minus, &expressions]);
+    push_all(&ret, vec![&expressions, &semi]);
 
     push_all(&factor0, vec![&lpr, &expressions, &rpr]);
     push_all(&term0, vec![&factor, &mul, &terms]);
@@ -132,7 +137,7 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
 
     // -----------------------------
 
-    let statement = alt("statement", vec![&fn_call, &declaration, &assignment]);
+    let statement = alt("statement", vec![&fn_call, &declaration, &assignment, &ret]);
 
     let statements0 = exp("statements0", vec![&statement]);
     let statements = alt("statements", vec![&statements0, &statement]);

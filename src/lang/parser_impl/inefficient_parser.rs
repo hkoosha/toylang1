@@ -228,7 +228,7 @@ pub fn parse_inefficiently(
                     Backtrack::No => {
                         trace!("backtracked: {}", root_of(&parser.focus).borrow());
                     }
-                    Backtrack::Fin => return Err("can not backtrack".to_string()),
+                    Backtrack::Fin => return Err("no match".to_string()),
                 }
                 trace!("backtracked: {}", root_of(&parser.focus).borrow());
                 ensure_parent_sane(&root_of(&parser.focus));

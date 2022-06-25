@@ -9,19 +9,21 @@ use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
 
 fn main() -> Result<(), String> {
     let mut builder = formatted_builder();
-    builder.parse_filters("DEBUG");
+    builder.parse_filters("TRACE");
     builder.try_init().unwrap();
 
     let program = "\
     fn my_thing42(int j) {
-         x1 = 1 * 30;\
-         x2 = x3 / 10;\
-         int y;\
-         y = x4 + 2;\
-         int z;\
-         print(\"foo\\\"bar some thing\");\
-         z = x5 * y;\
-         int x0;\
+        x1 = 1 * 30;
+        x2 = x3 / 10;
+        int y;
+        y = x4 + 2;
+        int z;
+        print(\"foo\\\"bar some thing\");
+        z = x5 * y;
+        print(z);
+        int x0;
+        return x0 + 0;
     }";
 
     let mut tokens = vec![];
