@@ -20,25 +20,33 @@ impl<'a> BacktrackingParser<'a> {
         expand(&self.tree, self.step_no as usize)
     }
 
-    fn match_next(&mut self) -> bool {
+    fn match_next(&mut self) -> (bool, Option<String>) {
         let terminal = left_most_empty_terminal(&self.tree);
 
         if terminal.is_none() {
-            return false;
+            return (false, None);
         }
 
         let terminal = terminal.unwrap();
-        if terminal
-            .borrow()
-            .rule()
+
+        let rule = terminal.borrow().rule();
+
+        if rule
             .borrow()
             .matches(&self.tokens.last().unwrap().token_kind)
         {
             terminal.borrow_mut().token = Some(self.tokens.pop().unwrap());
-            return true;
+            return (true, None);
         }
         else {
-            false
+            (
+                false,
+                Some(format!(
+                    "{} != {}",
+                    self.tokens.last().unwrap().text,
+                    rule.borrow().name()
+                )),
+            )
         }
     }
 
@@ -152,13 +160,10 @@ fn backtrack<'a>(
         }
 
         if any {
-            if erase_us || !any_alternated {
-                let mut node_mut = node.borrow_mut();
-                let mut children_swap = vec![];
-                std::mem::swap(&mut children_swap, &mut node_mut.children);
+            if erase_us { // || !any_alternated {
+                ensure_no_token(&node);
+                node.borrow_mut().children.clear();
             }
-
-            let has_next = node.borrow().has_next_alt();
 
             if any_alternated {
                 Backtrack::Backtracked {
@@ -166,8 +171,10 @@ fn backtrack<'a>(
                     erase_us: false,
                 }
             }
-            else if has_next {
+            else if node.borrow().has_next_alt() {
                 node.borrow_mut().alternative_no += 1;
+                ensure_no_token(&node);
+                node.borrow_mut().children.clear();
                 Backtrack::Backtracked {
                     any_alternated: true,
                     erase_us: false,
@@ -180,25 +187,28 @@ fn backtrack<'a>(
                 }
             }
         }
-        // else if !node.borrow().has_next_alt() {
-        //     println!("no more alt: {}", node.borrow().rule_name());
-        //     (Backtrack::NoOp, false)
-        // }
-        // else if am_i_next {
-        // println!("!!! increasing alt of: {}@{}", node.borrow().rule_name(), node.borrow().step_no);
-        // if !node.borrow().children.is_empty() {
-        //     panic!("alternating but still has children");
-        // }
-        // node.borrow_mut().alternative_no += 1;
-        // (Backtrack::NoOp, false)
-        // }
         else {
             Backtrack::NoOp
         }
     }
 }
 
+fn ensure_no_token(node: &Rc<RefCell<Node>>) {
+    println!("ensuring: {}", &node.borrow());
+    if node.borrow().is_terminal() {
+        if node.borrow().token.is_some() {
+            panic!("still has token: {}", node.borrow());
+        }
+    }
+    else {
+        for c in &node.borrow().children {
+            ensure_no_token(c);
+        }
+    }
+}
+
 fn expand(node: &Rc<RefCell<Node>>, step_no: usize) -> bool {
+    // println!("{}", node.borrow());
     return if node.borrow().is_terminal() {
         false
     }
@@ -213,6 +223,8 @@ fn expand(node: &Rc<RefCell<Node>>, step_no: usize) -> bool {
     else {
         let sub_rules = if node.borrow().is_alternative() {
             if node.borrow().rule().borrow().sub_rules().is_none() {
+                // println!("wtf rule: {}", node.borrow().rule().borrow());
+                // panic!("wtf?");
                 vec![node.borrow().rule()]
             }
             else {
@@ -312,17 +324,20 @@ pub fn parse_inefficiently(
             );
         }
 
+        let mut expanded = false;
         while !parser.is_matching_ready() {
+            expanded = true;
             if !parser.expand() {
                 return Err("can not expand".to_string());
             }
-            else {
-                println!("AFTER: {}", parser.tree.borrow());
-            }
+        }
+        if expanded {
+            println!("\nAFTER: {}\n", parser.tree.borrow());
         }
 
-        if !parser.match_next() {
-            println!("no match, backtracking");
+        let (matches, match_reason) = parser.match_next();
+        if !matches {
+            println!("no match, backtracking => {}", match_reason.unwrap());
             if !parser.backtrack() {
                 println!("{}", parser.tree.borrow().rule().borrow());
                 return Err("can not backtrack".to_string());
