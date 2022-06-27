@@ -79,7 +79,8 @@ impl<'a> Node<'a> {
 
     pub fn expandable_rules(&self) -> Vec<Rc<RefCell<Rule>>> {
         match &*self.rule.borrow() {
-            Rule::Terminal(_) => panic!("is terminal, not expandable"),
+            Rule::Epsilon => panic!("is E, not expandable"),
+            Rule::Terminal(_, _) => panic!("is terminal, not expandable"),
             Rule::Alternative { .. } => panic!("is alternative, not expandable"),
             Rule::Expandable { sub_rules, .. } => sub_rules.clone(),
         }
@@ -87,14 +88,15 @@ impl<'a> Node<'a> {
 
     pub fn rule_name(&self) -> String {
         match &*self.rule.borrow() {
-            Rule::Terminal(t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
+            Rule::Epsilon => "E".to_string(),
+            Rule::Terminal(_, t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
             Rule::Alternative { name, .. } => name.clone(),
             Rule::Expandable { name, .. } => name.clone(),
         }
     }
 
     pub fn is_terminal(&self) -> bool {
-        matches!(&*self.rule.borrow(), Rule::Terminal(_))
+        matches!(&*self.rule.borrow(), Rule::Terminal(_, _))
     }
 
     pub fn is_expandable(&self) -> bool {

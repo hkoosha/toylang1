@@ -34,9 +34,19 @@ return          -> RET expressions;
 ";
 
 pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
-    let mut e_num = 0;
-    let mut exp = move |name: &'static str, rules: Vec<&Rc<RefCell<Rule>>>| {
-        e_num += 1;
+    let num0 = Rc::new(RefCell::new(1_usize));
+    let num1 = Rc::clone(&num0);
+    let num2 = Rc::clone(&num0);
+
+    let get_num = move || {
+        let curr = *num0.borrow();
+        *num0.borrow_mut() = curr + 1;
+        curr
+    };
+
+    let exp = move |name: &'static str, rules: Vec<&Rc<RefCell<Rule>>>| {
+        let e_num = *num1.borrow();
+        *num1.borrow_mut() = e_num + 1;
         Rc::new(RefCell::new(Rule::Expandable {
             name: name.to_string(),
             num: e_num,
@@ -65,32 +75,32 @@ pub fn toylang_v0_rules() -> Rc<RefCell<Rule>> {
         }
     };
 
-    let mut a_num = 0;
-    let mut alt = move |name: &'static str, rules: Vec<&Rc<RefCell<Rule>>>| {
-        a_num += 1;
+    let alt = move |name: &'static str, rules: Vec<&Rc<RefCell<Rule>>>| {
+        let alt_num = *num2.borrow();
+        *num2.borrow_mut() = alt_num + 1;
         Rc::new(RefCell::new(Rule::Alternative {
             name: name.to_string(),
-            num: a_num,
+            num: alt_num,
             sub_rules: rules.iter().map(|it| Rc::clone(it)).collect(),
         }))
     };
 
-    let rbc: Rc<RefCell<Rule>> = TokenKind::Rbc.to_rule();
-    let lbc = TokenKind::Lbc.to_rule();
-    let lpr = TokenKind::Lpr.to_rule();
-    let rpr = TokenKind::Rpr.to_rule();
-    let fun = TokenKind::Fun.to_rule();
-    let semi = TokenKind::Smi.to_rule();
-    let comma = TokenKind::Com.to_rule();
-    let equ = TokenKind::Equ.to_rule();
-    let identifier = TokenKind::Idt.to_rule();
-    let int = TokenKind::Int.to_rule();
-    let mul = TokenKind::Mul.to_rule();
-    let div = TokenKind::Sls.to_rule();
-    let plus = TokenKind::Pls.to_rule();
-    let minus = TokenKind::Min.to_rule();
-    let text = TokenKind::Str.to_rule();
-    let ret_token = TokenKind::Ret.to_rule();
+    let rbc: Rc<RefCell<Rule>> = TokenKind::Rbc.to_rule(get_num());
+    let lbc = TokenKind::Lbc.to_rule(get_num());
+    let lpr = TokenKind::Lpr.to_rule(get_num());
+    let rpr = TokenKind::Rpr.to_rule(get_num());
+    let fun = TokenKind::Fun.to_rule(get_num());
+    let semi = TokenKind::Smi.to_rule(get_num());
+    let comma = TokenKind::Com.to_rule(get_num());
+    let equ = TokenKind::Equ.to_rule(get_num());
+    let identifier = TokenKind::Idt.to_rule(get_num());
+    let int = TokenKind::Int.to_rule(get_num());
+    let mul = TokenKind::Mul.to_rule(get_num());
+    let div = TokenKind::Sls.to_rule(get_num());
+    let plus = TokenKind::Pls.to_rule(get_num());
+    let minus = TokenKind::Min.to_rule(get_num());
+    let text = TokenKind::Str.to_rule(get_num());
+    let ret_token = TokenKind::Ret.to_rule(get_num());
 
     let param = exp("param", vec![&identifier, &identifier]);
     let params0 = exp("params0", vec![&param, &comma]);

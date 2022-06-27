@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -8,7 +8,8 @@ use crate::lang::lexer::token::TokenKind;
 
 #[derive(Eq)]
 pub enum Rule {
-    Terminal(TokenKind),
+    Epsilon,
+    Terminal(usize, TokenKind),
     Expandable {
         name: String,
         num: usize,
@@ -24,30 +25,33 @@ pub enum Rule {
 impl Rule {
     pub fn name(&self) -> String {
         match &self {
-            Rule::Terminal(t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
+            Rule::Epsilon => "E".to_string(),
+            Rule::Terminal(_, t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
             Rule::Expandable { name, .. } => name.clone(),
             Rule::Alternative { name, .. } => name.clone(),
         }
     }
 
-    pub fn num(&self) -> Option<usize> {
+    pub fn num(&self) -> usize {
         match &self {
-            Rule::Terminal(_) => None,
-            Rule::Expandable { num, .. } => Some(*num),
-            Rule::Alternative { num, .. } => Some(*num),
+            Rule::Epsilon => 0,
+            Rule::Terminal(num, _) => *num,
+            Rule::Expandable { num, .. } => *num,
+            Rule::Alternative { num, .. } => *num,
         }
     }
 
     pub fn sub_rules(&self) -> Option<&Vec<Rc<RefCell<Rule>>>> {
         match &self {
-            Rule::Terminal(_) => None,
+            Rule::Epsilon => None,
+            Rule::Terminal(_, _) => None,
             Rule::Expandable { sub_rules, .. } => Some(sub_rules),
             Rule::Alternative { sub_rules, .. } => Some(sub_rules),
         }
     }
 
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Rule::Terminal(_))
+        matches!(self, Rule::Terminal(_, _))
     }
 
     pub fn is_alternative(&self) -> bool {
@@ -64,7 +68,7 @@ impl Rule {
 
     pub fn matches(&self, token_kind: &TokenKind) -> bool {
         match self {
-            Rule::Terminal(terminal) => terminal == token_kind,
+            Rule::Terminal(_, terminal) => terminal == token_kind,
             _ => panic!("expecting a terminal"),
         }
     }
@@ -86,7 +90,8 @@ impl Display for Rule {
         let mut state = RuleDisplayState::default();
 
         match &self {
-            Rule::Terminal(_) => state.result.push_str(&self.name()),
+            Rule::Epsilon => state.result.push_str("E"),
+            Rule::Terminal(_, _) => state.result.push_str(&self.name()),
             Rule::Expandable { .. } => {
                 do_display_itself(self, &mut state);
                 do_display_children(self, &mut state);
@@ -109,76 +114,13 @@ impl Debug for Rule {
 
 impl Hash for Rule {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        match &self {
-            Rule::Terminal(t) => {
-                t.hash(state);
-            }
-            Rule::Expandable { name, num, .. } => {
-                state.write_usize(*num);
-                name.hash(state);
-                "expandable".hash(state);
-            }
-            Rule::Alternative { name, num, .. } => {
-                state.write_usize(*num);
-                name.hash(state);
-                "alternative".hash(state);
-            }
-        }
+        self.num().hash(state)
     }
 }
 
 impl PartialEq for Rule {
     fn eq(&self, other: &Self) -> bool {
-        match self {
-            Rule::Terminal(st) => match other {
-                Rule::Terminal(ot) => *st == *ot,
-                _ => false,
-            },
-            Rule::Expandable { name, num, .. } => match other {
-                Rule::Terminal(_) => false,
-                Rule::Expandable {
-                    name: o_name,
-                    num: o_num,
-                    ..
-                } => *name == *o_name && *num == *o_num,
-                Rule::Alternative { .. } => false,
-            },
-            Rule::Alternative { name, num, .. } => match other {
-                Rule::Terminal(_) => false,
-                Rule::Expandable { .. } => false,
-                Rule::Alternative {
-                    name: o_name,
-                    num: o_num,
-                    ..
-                } => *name == *o_name && *num == *o_num,
-            },
-        }
-    }
-}
-
-impl Clone for Rule {
-    fn clone(&self) -> Self {
-        match self {
-            Rule::Terminal(t) => Self::Terminal(*t),
-            Rule::Expandable {
-                name,
-                num,
-                sub_rules,
-            } => Self::Expandable {
-                name: name.clone(),
-                num: *num,
-                sub_rules: sub_rules.clone(),
-            },
-            Rule::Alternative {
-                name,
-                num,
-                sub_rules,
-            } => Self::Alternative {
-                name: name.clone(),
-                num: *num,
-                sub_rules: sub_rules.clone(),
-            },
-        }
+        self.num() == other.num()
     }
 }
 
@@ -194,7 +136,8 @@ struct RuleDisplayState {
 impl RuleDisplayState {
     fn should_display(&mut self, rule_node: &Rule) -> bool {
         match &rule_node {
-            Rule::Terminal(_) => false,
+            Rule::Epsilon => false,
+            Rule::Terminal(_, _) => false,
             Rule::Expandable { num, .. } => {
                 if self.seen_ex.contains(num) {
                     false
@@ -218,7 +161,8 @@ impl RuleDisplayState {
 
     fn should_display_children(&mut self, rule_node: &Rule) -> bool {
         match &rule_node {
-            Rule::Terminal(_) => false,
+            Rule::Epsilon => false,
+            Rule::Terminal(_, _) => false,
             Rule::Expandable { num, .. } => {
                 if self.seen_ex_children.contains(num) {
                     false
@@ -248,7 +192,8 @@ fn do_display_itself(rule_node: &Rule, state: &mut RuleDisplayState) {
 
     state.result.push('\n');
     match &rule_node {
-        Rule::Terminal(_) => panic!("not expecting terminal in display itself"),
+        Rule::Epsilon => panic!("not expecting E in display itself"),
+        Rule::Terminal(_, _) => panic!("not expecting terminal in display itself"),
         Rule::Expandable {
             sub_rules: rules,
             name,
@@ -286,7 +231,8 @@ fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
     }
 
     match &rule_node {
-        Rule::Terminal(_) => panic!("not expecting terminal in display children"),
+        Rule::Epsilon => panic!("not expecting E in display children"),
+        Rule::Terminal(_, _) => panic!("not expecting terminal in display children"),
         Rule::Expandable {
             sub_rules: rules, ..
         } => {
@@ -312,7 +258,8 @@ fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
 
 fn erase(rule: &mut Rule, seen: &mut Vec<usize>) {
     match rule {
-        Rule::Terminal(_) => {}
+        Rule::Epsilon => {}
+        Rule::Terminal(_, _) => {}
         Rule::Expandable {
             sub_rules: rules,
             num,
@@ -346,81 +293,80 @@ fn do_erase(rules: &mut Vec<Rc<RefCell<Rule>>>, seen: &mut Vec<usize>, num: &usi
 }
 
 pub trait ToRule {
-    fn to_rule(self) -> Rc<RefCell<Rule>>;
+    fn to_rule(self, num: usize) -> Rc<RefCell<Rule>>;
 }
 
 impl ToRule for TokenKind {
-    fn to_rule(self) -> Rc<RefCell<Rule>> {
-        Rc::new(RefCell::new(Rule::Terminal(self)))
+    fn to_rule(self, num: usize) -> Rc<RefCell<Rule>> {
+        Rc::new(RefCell::new(Rule::Terminal(num, self)))
     }
 }
 
 pub fn eliminate_left_recursion(root: Rc<RefCell<Rule>>) -> Rc<RefCell<Rule>> {
-    let mut map = HashMap::new();
-    let mut numbers = HashMap::new();
-    to_map(&root, &mut map, &mut numbers, &mut 0);
+    let mut by_number = BTreeMap::new();
+    to_map(&root, &mut by_number);
 
-    for (name, rule) in &map {
+    for (rule_num, rule) in &by_number {
+        let rule = rule.borrow();
         if rule.is_terminal() {
             continue;
         }
 
-        let rule_num = numbers[name];
+        println!("{}", rule_num);
 
         loop {
             if rule.is_expandable() {
-                let first = rule.sub_rules().unwrap().get(0).unwrap();
-                if first.borrow().is_non_terminal() && numbers[&first.borrow().name()] < rule_num {
-                    panic!("kill me");
+                let a_j = rule.sub_rules().unwrap().get(0).unwrap();
+                if !a_j.borrow().is_terminal() && a_j.borrow().num() < rule.num() {
+                    println!("working: {}", rule);
                 }
+
+                break;
             }
             else {
                 for sub_rule in rule.sub_rules().unwrap() {
-                    match &*sub_rule.borrow() {
-                        Rule::Terminal(_) => {}
-                        Rule::Expandable { .. } => {}
-                        Rule::Alternative { .. } => {}
+                    if sub_rule.borrow().is_terminal() {
+                        continue;
+                    }
+
+                    let sub_rule_b = sub_rule.borrow();
+                    let a_j = sub_rule_b.sub_rules().unwrap().get(0).unwrap();
+                    if !a_j.borrow().is_terminal() && a_j.borrow().num() < rule.num() {
+                        println!("working: {}", sub_rule.borrow());
                     }
                 }
+
+                break;
             }
         }
     }
+
     todo!()
 }
 
-fn to_map(
-    rule: &Rc<RefCell<Rule>>,
-    map: &mut HashMap<String, Rule>,
-    numbers: &mut HashMap<String, usize>,
-    carry: &mut usize,
-) {
+fn to_map(rule: &Rc<RefCell<Rule>>, by_number: &mut BTreeMap<usize, Rc<RefCell<Rule>>>) {
     match &*rule.borrow() {
-        Rule::Terminal(t) => {
-            if !numbers.contains_key(t.name()) {
-                map.insert(t.name().to_string(), rule.borrow().clone());
-                numbers.insert(t.name().to_string(), *carry);
-                *carry += 1;
+        Rule::Epsilon => {
+            if !by_number.contains_key(&0) {
+                by_number.insert(0, Rc::clone(rule));
             }
         }
-        Rule::Expandable {
-            name, sub_rules, ..
-        } => {
-            if map.insert(name.clone(), rule.borrow().clone()) == None {
-                numbers.insert(name.clone(), *carry);
-                *carry += 1;
+        Rule::Terminal(num, _) => {
+            if !by_number.contains_key(num) {
+                by_number.insert(*num, Rc::clone(rule));
+            }
+        }
+        Rule::Expandable { sub_rules, num, .. } => {
+            if by_number.insert(*num, Rc::clone(rule)) == None {
                 for r in sub_rules {
-                    to_map(r, map, numbers, carry);
+                    to_map(r, by_number);
                 }
             }
         }
-        Rule::Alternative {
-            name, sub_rules, ..
-        } => {
-            if map.insert(name.clone(), rule.borrow().clone()) == None {
-                numbers.insert(name.clone(), *carry);
-                *carry += 1;
+        Rule::Alternative { sub_rules, num, .. } => {
+            if by_number.insert(*num, Rc::clone(rule)) == None {
                 for r in sub_rules {
-                    to_map(r, map, numbers, carry);
+                    to_map(r, by_number);
                 }
             }
         }
