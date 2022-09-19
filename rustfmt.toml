@@ -1,1 +1,13 @@
 control_brace_style = "ClosingNextLine"
+blank_lines_upper_bound = 2
+edition = "2021"
+empty_item_single_line = false
+fn_args_layout = "Vertical"
+imports_layout = "Vertical"
+match_block_trailing_comma = true
+imports_granularity = "Item"
+newline_style = "Unix"
+group_imports = "StdExternalCrate"
+single_line_if_else_max_width = 0
+struct_lit_single_line = false
+

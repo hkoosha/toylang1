@@ -1,47 +1,53 @@
-use std::rc::Rc;
+use toylang1::lang::lexer::v0::Lexer;
 
-use log::info;
-use pretty_env_logger::formatted_builder;
-
-use toylang::lang::lexer::Lexer;
-use toylang::lang::parser::grammar::toylang_v0_rules;
-use toylang::lang::parser::rule::eliminate_left_recursion;
-use toylang::lang::parser_impl::inefficient_parser::parse_inefficiently;
-
-fn main() -> Result<(), String> {
-    let mut builder = formatted_builder();
-    builder.parse_filters("INFO");
-    builder.try_init().expect("logger failed to initialize");
-
-    let program = "\
+const SAMPLE_PROGRAM: &str = "\
     fn my_thing42(int j) {
         x1 = 1 * 30;
         x2 = x3 / 10;
         int y;
         y = x4 + 2;
         int z;
-        print(\"foo\\\"bar some thing\");
+        print(\"foo\\\"bar \\some thing\");
         z = x5 * y;
         print(z);
         int x0;
         return x0 + 0;
     }";
 
-    let mut tokens = vec![];
-    for token in Lexer::new(program) {
-        let token = token?;
-        tokens.push(token)
+#[allow(dead_code)]
+const GRAMMAR: &str = "
+
+S               -> fn_call | fn_declaration
+fn_call         -> IDT ( args ) ;
+args            -> args0 | arg
+args0           -> arg , args
+arg             -> TXT | INT | IDT
+fn_declaration  -> fn IDT ( params ) { statements }
+params          -> params0 | param
+params0         -> param , params
+param           -> IDT IDT
+statements      -> statements0 | statement
+statements0     -> statement statements
+statement       -> declaration | assignment | fn_call | return
+declaration     -> IDT IDT ;
+assignment      -> IDT = expressions ;
+expressions     -> expression0 | expression1 | terms
+expression0     -> terms + expressions
+expression1     -> terms - expressions
+terms           -> term0 | term1 | factor
+term0           -> factor * terms
+term1           -> factor / terms
+factor          -> factor0 | INT | IDT
+factor0         -> ( expressions )
+return          -> RET expressions;
+
+";
+
+fn main() -> Result<(), String> {
+    let lexer: Lexer = SAMPLE_PROGRAM.into();
+    for token in lexer {
+        println!("token: {}", token?.text);
     }
-
-    let r = toylang_v0_rules();
-
-    let tree = parse_inefficiently(tokens, Rc::clone(&r))?;
-
-    info!("program: \n\n{}\n", program);
-    info!("grammar: \n{}\n", r.borrow());
-    info!("tree: \n{}\n", tree.borrow());
-
-    eliminate_left_recursion(r);
 
     Ok(())
 }

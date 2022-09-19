@@ -1,374 +1,480 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::rc::Rc;
+
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use crate::lang::lexer::token::TokenKind;
 
-#[derive(Eq)]
-pub enum Rule {
-    Epsilon,
-    Terminal(usize, TokenKind),
-    Expandable {
-        name: String,
-        num: usize,
-        sub_rules: Vec<Rc<RefCell<Rule>>>,
-    },
-    Alternative {
-        name: String,
-        num: usize,
-        sub_rules: Vec<Rc<RefCell<Rule>>>,
-    },
+lazy_static! {
+    static ref VALID_RULE_NAME: Regex = Regex::new(r"^[a-zA-Z0-9_]+$").unwrap();
 }
 
-impl Rule {
-    pub fn name(&self) -> String {
-        match &self {
-            Rule::Epsilon => "E".to_string(),
-            Rule::Terminal(_, t) => t.repr().unwrap_or_else(|| t.name()).to_string(),
-            Rule::Expandable { name, .. } => name.clone(),
-            Rule::Alternative { name, .. } => name.clone(),
-        }
+pub(super) fn is_valid_rule_name(rule_name: &str) -> bool {
+    VALID_RULE_NAME.is_match(rule_name)
+}
+
+pub(super) fn ensure_is_valid_rule_name(rule_name: &str) -> Result<&str, String> {
+    if is_valid_rule_name(rule_name) {
+        Ok(rule_name)
+    }
+    else {
+        Err(format!(
+            "only non-empty alphanumeric names are accepted, given name={}",
+            rule_name
+        ))
+    }
+}
+
+
+#[derive(Clone)]
+pub enum RulePart {
+    Rule(Rc<RefCell<Rule>>),
+    Token(TokenKind),
+}
+
+impl RulePart {
+    pub fn is_token(&self) -> bool {
+        matches!(self, RulePart::Token(_))
     }
 
-    pub fn num(&self) -> usize {
-        match &self {
-            Rule::Epsilon => 0,
-            Rule::Terminal(num, _) => *num,
-            Rule::Expandable { num, .. } => *num,
-            Rule::Alternative { num, .. } => *num,
-        }
+    pub fn is_rule(&self) -> bool {
+        matches!(self, RulePart::Rule(_))
     }
 
-    pub fn sub_rules(&self) -> Option<&Vec<Rc<RefCell<Rule>>>> {
-        match &self {
-            Rule::Epsilon => None,
-            Rule::Terminal(_, _) => None,
-            Rule::Expandable { sub_rules, .. } => Some(sub_rules),
-            Rule::Alternative { sub_rules, .. } => Some(sub_rules),
-        }
-    }
-
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, Rule::Terminal(_, _))
-    }
-
-    pub fn is_alternative(&self) -> bool {
-        matches!(self, Rule::Alternative { .. })
-    }
-
-    pub fn is_expandable(&self) -> bool {
-        matches!(self, Rule::Expandable { .. })
-    }
-
-    pub fn is_non_terminal(&self) -> bool {
-        !self.is_terminal()
-    }
-
-    pub fn matches(&self, token_kind: &TokenKind) -> bool {
+    pub fn get_rule(&self) -> Rc<RefCell<Rule>> {
         match self {
-            Rule::Terminal(_, terminal) => terminal == token_kind,
-            _ => panic!("expecting a terminal"),
+            RulePart::Rule(rule) => Rc::clone(rule),
+            RulePart::Token(tk) => panic!("token kind is not a rule: {}", tk.repr_or_name()),
         }
     }
 
-    pub fn has_next(&self, alt: usize) -> bool {
-        return self.sub_rules().is_some() && self.sub_rules().unwrap().get(alt).is_some();
-    }
-}
-
-impl Drop for Rule {
-    fn drop(&mut self) {
-        let mut seen = vec![];
-        erase(self, &mut seen);
-    }
-}
-
-impl Display for Rule {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut state = RuleDisplayState::default();
-
-        match &self {
-            Rule::Epsilon => state.result.push_str("E"),
-            Rule::Terminal(_, _) => state.result.push_str(&self.name()),
-            Rule::Expandable { .. } => {
-                do_display_itself(self, &mut state);
-                do_display_children(self, &mut state);
-            }
-            Rule::Alternative { .. } => {
-                do_display_itself(self, &mut state);
-                do_display_children(self, &mut state);
-            }
+    pub fn name(&self) -> String {
+        match self {
+            RulePart::Rule(rule) => rule.borrow().name.to_string(),
+            RulePart::Token(tk) => tk.upper_name().to_string(),
         }
-
-        write!(f, "{}", &state.result)
     }
 }
 
-impl Debug for Rule {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Display for RulePart {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            RulePart::Rule(rule) => write!(f, "RulePart::Rule[{}]", rule.borrow()),
+            RulePart::Token(token_kind) => write!(f, "RulePart::Token[{}]", token_kind),
+        }
+    }
+}
+
+impl Debug for RulePart {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
 
+pub fn display_of_vec_rule_part(
+    rule_parts: &Vec<RulePart>,
+    include_struct_name: bool,
+) -> String {
+    let mut display = match include_struct_name {
+        true => "RuleParts<",
+        false => "<",
+    }
+    .to_string();
+
+    for r in rule_parts {
+        display += &match r {
+            RulePart::Rule(rule) => rule.borrow().name.to_string(),
+            RulePart::Token(token_kind) => token_kind.upper_name().to_string(),
+        };
+        display += ", ";
+    }
+
+    if !rule_parts.is_empty() {
+        display.pop();
+        display.pop();
+    }
+
+    display += ">";
+    display
+}
+
+
+pub struct Rule {
+    name: String,
+    recursion_elimination_num: usize,
+    pub alternatives: Vec<Vec<RulePart>>,
+}
+
+impl Rule {
+    pub(super) fn new(
+        name: String,
+        recursion_elimination_num: usize,
+    ) -> Self {
+        Self {
+            name,
+            recursion_elimination_num,
+            alternatives: vec![],
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn recursion_elimination_num(&self) -> usize {
+        self.recursion_elimination_num
+    }
+
+
+    pub(super) fn add_alt(&mut self) {
+        self.alternatives.push(vec![]);
+    }
+
+    pub(super) fn push_last(
+        &mut self,
+        rule_part: RulePart,
+    ) {
+        let len = match self.num_alts() {
+            0 => panic!("no alternative exists"),
+            len => len - 1,
+        };
+        self.push(len, rule_part)
+    }
+
+    fn push(
+        &mut self,
+        alt_no: usize,
+        rule_part: RulePart,
+    ) {
+        if alt_no >= self.alternatives.len() {
+            panic!("alt does not exist: {}", alt_no);
+        }
+        self.alternatives[alt_no].push(rule_part);
+    }
+
+
+    pub fn num_alts(&self) -> usize {
+        self.alternatives.len()
+    }
+
+    pub fn is_valid(&self) -> Result<(), String> {
+        let set = self
+            .alternatives
+            .iter()
+            .map(|it| {
+                it.iter()
+                    .map(|it| match it {
+                        RulePart::Rule(rule) => rule.borrow().name.to_string(),
+                        RulePart::Token(tk) => tk.name().to_string(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join("-")
+            })
+            .collect::<HashSet<_>>();
+
+
+        // Duplicate rule in alternatives.
+        if set.len() != self.alternatives.len() {
+            let list = self
+                .alternatives
+                .iter()
+                .map(|it| {
+                    it.iter()
+                        .map(|it| match it {
+                            RulePart::Rule(rule) => rule.borrow().name.to_string(),
+                            RulePart::Token(tk) => tk.name().to_string(),
+                        })
+                        .collect::<Vec<String>>()
+                        .join("-")
+                })
+                .filter(|it| !set.contains(it))
+                .collect::<Vec<_>>();
+            let shit: Vec<String> = set.iter().cloned().collect();
+            return Err(format!(
+                "duplicates: {} - {}",
+                list.join(", "),
+                shit.join(", ")
+            ));
+        }
+
+        // Rule is infinitely and inherently recursive without a fix.
+        // Such as the rule: some_rule -> some_rule foo bar | some_rule baz quo
+        if !self.alternatives.iter().any(|it| {
+            // Find any rule that does not start with recursion, if not, error.
+            it.is_empty() || it[0].is_token() || it[0].get_rule().borrow().name != self.name
+        }) {
+            return Err(format!(
+                "infinitely recursive rule: all sub-rules recurse to the same rule, self={}",
+                self
+            ));
+        }
+
+        // Rule has pointless sub-rule
+        // Such as the rule: some_rule -> foo | some_rule
+        if self.alternatives.iter().any(|it| {
+            // Find any sub-rule which is single and will recurse to self, if found, error.
+            it.len() == 1 && it[0].is_rule() && it[0].get_rule().borrow().name == self.name
+        }) {
+            return Err(format!(
+                "pointless rule: a singly sub-rule refers to the same rule, self={}",
+                self
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+
+impl Drop for Rule {
+    fn drop(&mut self) {
+        self.alternatives.clear();
+    }
+}
+
+impl Display for Rule {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        let alternatives = self
+            .alternatives
+            .iter()
+            .map(|it| {
+                it.iter()
+                    .map(|it| match it {
+                        RulePart::Rule(rule) => rule.borrow().name.to_string(),
+                        RulePart::Token(tk) => tk.repr_or_name().to_uppercase(),
+                    })
+                    .intersperse(" ".to_string())
+                    .collect::<String>()
+            })
+            .intersperse(" | ".to_string())
+            .collect::<String>();
+        write!(f, "Rule[{} -> {}]", self.name, alternatives)
+    }
+}
+
 impl Hash for Rule {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.num().hash(state)
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name().hash(state)
     }
 }
 
 impl PartialEq for Rule {
-    fn eq(&self, other: &Self) -> bool {
-        self.num() == other.num()
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name().eq(other.name())
     }
 }
 
-#[derive(Default)]
-struct RuleDisplayState {
-    result: String,
-    seen_ex: Vec<usize>,
-    seen_al: Vec<usize>,
-    seen_ex_children: Vec<usize>,
-    seen_al_children: Vec<usize>,
+impl Eq for Rule {
 }
 
-impl RuleDisplayState {
-    fn should_display(&mut self, rule_node: &Rule) -> bool {
-        match &rule_node {
-            Rule::Epsilon => false,
-            Rule::Terminal(_, _) => false,
-            Rule::Expandable { num, .. } => {
-                if self.seen_ex.contains(num) {
-                    false
-                }
-                else {
-                    self.seen_ex.push(*num);
-                    true
-                }
-            }
-            Rule::Alternative { num, .. } => {
-                if self.seen_al.contains(num) {
-                    false
-                }
-                else {
-                    self.seen_al.push(*num);
-                    true
-                }
-            }
-        }
-    }
 
-    fn should_display_children(&mut self, rule_node: &Rule) -> bool {
-        match &rule_node {
-            Rule::Epsilon => false,
-            Rule::Terminal(_, _) => false,
-            Rule::Expandable { num, .. } => {
-                if self.seen_ex_children.contains(num) {
-                    false
-                }
-                else {
-                    self.seen_ex_children.push(*num);
-                    true
-                }
-            }
-            Rule::Alternative { num, .. } => {
-                if self.seen_al_children.contains(num) {
-                    false
-                }
-                else {
-                    self.seen_al_children.push(*num);
-                    true
-                }
-            }
-        }
+impl Into<RulePart> for TokenKind {
+    fn into(self) -> RulePart {
+        RulePart::Token(self)
     }
 }
 
-fn do_display_itself(rule_node: &Rule, state: &mut RuleDisplayState) {
-    if !state.should_display(rule_node) {
-        return;
-    }
-
-    state.result.push('\n');
-    match &rule_node {
-        Rule::Epsilon => panic!("not expecting E in display itself"),
-        Rule::Terminal(_, _) => panic!("not expecting terminal in display itself"),
-        Rule::Expandable {
-            sub_rules: rules,
-            name,
-            ..
-        } => {
-            let names = rules
-                .iter()
-                .map(|it| it.borrow().name())
-                .collect::<Vec<String>>()
-                .join(" ");
-            state.result.push_str(&format!("{:15}", name));
-            state.result.push_str(" -> ");
-            state.result.push_str(&names);
-        }
-        Rule::Alternative {
-            name,
-            sub_rules: rules,
-            ..
-        } => {
-            let names = rules
-                .iter()
-                .map(|it| it.borrow().name())
-                .collect::<Vec<String>>()
-                .join(" | ");
-            state.result.push_str(&format!("{:15}", name));
-            state.result.push_str(" -> ");
-            state.result.push_str(&names);
-        }
+impl Into<RulePart> for Rule {
+    fn into(self) -> RulePart {
+        RulePart::Rule(self.into())
     }
 }
 
-fn do_display_children(rule_node: &Rule, state: &mut RuleDisplayState) {
-    if !state.should_display_children(rule_node) {
-        return;
-    }
-
-    match &rule_node {
-        Rule::Epsilon => panic!("not expecting E in display children"),
-        Rule::Terminal(_, _) => panic!("not expecting terminal in display children"),
-        Rule::Expandable {
-            sub_rules: rules, ..
-        } => {
-            for r in rules.iter() {
-                do_display_itself(&*r.borrow(), state);
-            }
-            for r in rules.iter() {
-                do_display_children(&*r.borrow(), state);
-            }
-        }
-        Rule::Alternative {
-            sub_rules: rules, ..
-        } => {
-            for r in rules.iter() {
-                do_display_itself(&*r.borrow(), state);
-            }
-            for r in rules.iter() {
-                do_display_children(&*r.borrow(), state);
-            }
-        }
+impl Into<RulePart> for Rc<RefCell<Rule>> {
+    fn into(self) -> RulePart {
+        RulePart::Rule(Rc::clone(&self))
     }
 }
 
-fn erase(rule: &mut Rule, seen: &mut Vec<usize>) {
-    match rule {
-        Rule::Epsilon => {}
-        Rule::Terminal(_, _) => {}
-        Rule::Expandable {
-            sub_rules: rules,
-            num,
-            ..
-        } => {
-            do_erase(rules, seen, num);
-        }
-        Rule::Alternative {
-            sub_rules: rules,
-            num,
-            ..
-        } => {
-            do_erase(rules, seen, num);
-        }
+impl Into<Rc<RefCell<Rule>>> for Rule {
+    fn into(self) -> Rc<RefCell<Rule>> {
+        Rc::new(RefCell::new(self))
     }
 }
 
-fn do_erase(rules: &mut Vec<Rc<RefCell<Rule>>>, seen: &mut Vec<usize>, num: &usize) {
-    if !seen.contains(num) {
-        seen.push(*num);
-        for sub_rule in &mut rules.iter_mut() {
-            match sub_rule.try_borrow_mut() {
-                Err(_) => {}
-                Ok(mut ok) => {
-                    erase(&mut *ok, seen);
-                }
-            }
-        }
-        rules.clear();
-    }
-}
 
-pub trait ToRule {
-    fn to_rule(self, num: usize) -> Rc<RefCell<Rule>>;
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl ToRule for TokenKind {
-    fn to_rule(self, num: usize) -> Rc<RefCell<Rule>> {
-        Rc::new(RefCell::new(Rule::Terminal(num, self)))
-    }
-}
+    #[test]
+    fn test_print_simple() {
+        let mut r0: Rule = Rule::new("r0".to_string(), 0);
+        r0.add_alt();
 
-pub fn eliminate_left_recursion(root: Rc<RefCell<Rule>>) -> Rc<RefCell<Rule>> {
-    let mut by_number = BTreeMap::new();
-    to_map(&root, &mut by_number);
+        r0.push_last(TokenKind::Return.into());
+        r0.push_last(TokenKind::Id.into());
 
-    for (rule_num, rule) in &by_number {
-        let rule = rule.borrow();
-        if rule.is_terminal() {
-            continue;
-        }
-
-        println!("{}", rule_num);
-
-        loop {
-            if rule.is_expandable() {
-                let a_j = rule.sub_rules().unwrap().get(0).unwrap();
-                if !a_j.borrow().is_terminal() && a_j.borrow().num() < rule.num() {
-                    println!("working: {}", rule);
-                }
-
-                break;
-            }
-            else {
-                for sub_rule in rule.sub_rules().unwrap() {
-                    if sub_rule.borrow().is_terminal() {
-                        continue;
-                    }
-
-                    let sub_rule_b = sub_rule.borrow();
-                    let a_j = sub_rule_b.sub_rules().unwrap().get(0).unwrap();
-                    if !a_j.borrow().is_terminal() && a_j.borrow().num() < rule.num() {
-                        println!("working: {}", sub_rule.borrow());
-                    }
-                }
-
-                break;
-            }
-        }
+        assert_eq!(
+            format!("{}", r0),
+            format!(
+                "Rule[r0 -> {} {}]",
+                TokenKind::Return.upper_name(),
+                TokenKind::Id.upper_name()
+            )
+        );
     }
 
-    todo!()
-}
+    #[test]
+    fn test_print_circular_reference() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
 
-fn to_map(rule: &Rc<RefCell<Rule>>, by_number: &mut BTreeMap<usize, Rc<RefCell<Rule>>>) {
-    match &*rule.borrow() {
-        Rule::Epsilon => {
-            if !by_number.contains_key(&0) {
-                by_number.insert(0, Rc::clone(rule));
-            }
-        }
-        Rule::Terminal(num, _) => {
-            if !by_number.contains_key(num) {
-                by_number.insert(*num, Rc::clone(rule));
-            }
-        }
-        Rule::Expandable { sub_rules, num, .. } => {
-            if by_number.insert(*num, Rc::clone(rule)) == None {
-                for r in sub_rules {
-                    to_map(r, by_number);
-                }
-            }
-        }
-        Rule::Alternative { sub_rules, num, .. } => {
-            if by_number.insert(*num, Rc::clone(rule)) == None {
-                for r in sub_rules {
-                    to_map(r, by_number);
-                }
-            }
-        }
+        let r1: RulePart = TokenKind::Return.into();
+
+        let r2: Rule = Rule::new("r2".to_string(), 1);
+        let r2: Rc<RefCell<Rule>> = r2.into();
+
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r1);
+        r0.borrow_mut().push_last(r2.clone().into());
+
+        r2.borrow_mut().add_alt();
+        r2.borrow_mut().push_last(r0.clone().into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> RETURN r2]");
+        assert_eq!(format!("{}", r2.borrow()), "Rule[r2 -> r0]");
+    }
+
+    #[test]
+    fn test_print_circular_self_reference() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
+
+        let r1: Rule = Rule::new("r1".to_string(), 1);
+        let r1: Rc<RefCell<Rule>> = r1.into();
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(Rc::clone(&r0).into());
+        r0.borrow_mut().push_last(r1.into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r1 | r0 r1]");
+
+        r0.borrow().is_valid().unwrap();
+    }
+
+
+    #[test]
+    fn test_valid_circular() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
+
+        let r1: Rule = Rule::new("r1".to_string(), 1);
+        let r1: Rc<RefCell<Rule>> = r1.into();
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r1.into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r1]");
+
+        r0.borrow().is_valid().unwrap();
+    }
+
+
+    #[test]
+    fn test_invalid_infinitely_recursive_rule_case_0() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0]");
+        assert!(r0
+            .borrow()
+            .is_valid()
+            .err()
+            .unwrap()
+            .starts_with("infinitely recursive rule"),);
+    }
+
+    #[test]
+    fn test_invalid_infinitely_recursive_rule_case_1() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
+
+        let r1: Rule = Rule::new("r1".to_string(), 1);
+        let r1: Rc<RefCell<Rule>> = r1.into();
+
+        let r2: Rule = Rule::new("r2".to_string(), 2);
+        let r2: Rc<RefCell<Rule>> = r2.into();
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+        r0.borrow_mut().push_last(r2.clone().into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 r2]");
+        assert!(r0
+            .borrow()
+            .is_valid()
+            .err()
+            .unwrap()
+            .starts_with("infinitely recursive rule"),);
+    }
+
+    #[test]
+    fn test_invalid_pointless_rule() {
+        let r0: Rule = Rule::new("r0".to_string(), 0);
+        let r0: Rc<RefCell<Rule>> = r0.into();
+
+        let r1: Rule = Rule::new("r1".to_string(), 1);
+        let r1: Rc<RefCell<Rule>> = r1.into();
+
+        let r2: Rule = Rule::new("r2".to_string(), 2);
+        let r2: Rc<RefCell<Rule>> = r2.into();
+
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r0.clone().into());
+        r0.borrow_mut().add_alt();
+        r0.borrow_mut().push_last(r2.clone().into());
+
+        assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 | r2]");
+        assert!(r0
+            .borrow()
+            .is_valid()
+            .err()
+            .unwrap()
+            .starts_with("pointless rule"),);
+    }
+
+
+    #[test]
+    fn test_bad_rule_name() {
+        assert_eq!(false, is_valid_rule_name("a b"));
+        assert_eq!(false, is_valid_rule_name("a,b"));
     }
 }

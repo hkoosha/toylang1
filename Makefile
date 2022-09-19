@@ -27,3 +27,15 @@ fmt: format
 backtrace:
 	RUST_BACKTRACE=1 cargo run 2>&1 | grep -v core:: | grep -v 'at /rustc'
 
+.PHONY: test
+test:
+	cargo test -- --show-output
+
+.PHONY: t
+t:
+	cargo test test_eliminate_indirect_left_recursions -- --show-output
+
+.PHONY: verify
+verify:
+	cargo test
+
