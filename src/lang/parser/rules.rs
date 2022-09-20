@@ -6,14 +6,13 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
-use crate::lang::parser::rule::display_of_vec_rule_part;
 use crate::lang::parser::rule::ensure_is_valid_rule_name;
 use crate::lang::parser::rule::Rule;
 use crate::lang::parser::rule::RulePart;
 
 #[derive(Eq, PartialEq)]
 pub struct Rules {
-    rules: Vec<Rc<RefCell<Rule>>>,
+    pub rules: Vec<Rc<RefCell<Rule>>>,
 }
 
 impl Rules {
@@ -26,7 +25,6 @@ impl Rules {
             rules,
         }
     }
-
 
     pub fn parse(rules_description: &str) -> Result<Self, String> {
         let mut rules: Vec<Rc<RefCell<Rule>>> = vec![];
@@ -131,7 +129,11 @@ impl Rules {
     }
 
 
-    pub fn eliminate_direct_left_recursions(&mut self) -> bool {
+    fn eliminate_direct_left_recursions(&mut self) {
+        while self.eliminate_direct_left_recursions0() {}
+    }
+
+    fn eliminate_direct_left_recursions0(&mut self) -> bool {
         if let Err(err) = self.is_valid() {
             panic!("rules are not valid: {}", err);
         }
@@ -175,11 +177,11 @@ impl Rules {
                             .iter_mut()
                             .partition_in_place(|it| {
                                 !it.is_empty()
-                                && it[0].is_rule()
+                                    && it[0].is_rule()
                                     // Risky bet: if it's borrowed, it's ourselves!
                                     && it[0].get_rule().try_borrow().map_or(true, |it| {
-                                         it.name() == name.as_ref().unwrap()
-                                     })
+                                    it.name() == name.as_ref().unwrap()
+                                })
                             });
                         rule.borrow_mut()
                             .alternatives
@@ -223,26 +225,37 @@ impl Rules {
         any_change
     }
 
+    fn find_new_indexed_name(
+        &self,
+        name: &str,
+    ) -> String {
+        for i in 0..usize::MAX {
+            let new_name = format!("{}__{}", name, i);
+            if !self.has_rule(&new_name) {
+                return new_name;
+            }
+        }
 
-    pub fn eliminate_indirect_left_recursions(&mut self) {
-        while self.eliminate_indirect_left_recursions0() {}
+        panic!("indexes exhausted for: {}", name);
     }
 
+
     fn eliminate_indirect_left_recursions0(&mut self) -> bool {
-        while self.eliminate_direct_left_recursions() {}
+        self.eliminate_direct_left_recursions();
 
         let mut any_change = false;
 
-        if let Some((i, i_alt_index, s)) = self.eliminate_indirect_left_recursions_find_i_s() {
-            let i_offending_rule = self.find_rule_by_recursion_num(i);
-            let mut i_alt_offending_rule = i_offending_rule
-                .borrow_mut()
-                .alternatives
-                .remove(i_alt_index);
-            let _recursion_call_to_rule_s = i_alt_offending_rule.remove(0);
-            for s_alt in &self.find_rule_by_recursion_num(s).borrow().alternatives {
+        if let Some((i, i_alt_index, s)) = self.find_i_and_s() {
+            let rule_i = self.find_rule_by_recursion_num(i);
+            let mut rule_i_alt = rule_i.borrow_mut().alternatives.remove(i_alt_index);
+
+            let recursive_call_to_rule_s = rule_i_alt.remove(0);
+            let rule_s = self.find_rule_by_recursion_num(s);
+            assert_eq!(recursive_call_to_rule_s.name(), rule_s.borrow().name());
+
+            for s_alt in &rule_s.borrow().alternatives {
                 let mut fix = s_alt.clone();
-                fix.append(&mut i_alt_offending_rule.clone());
+                fix.append(&mut rule_i_alt.clone());
                 self.rules[i].borrow_mut().alternatives.push(fix);
                 any_change = true;
             }
@@ -255,20 +268,12 @@ impl Rules {
         any_change
     }
 
-    fn eliminate_indirect_left_recursions_find_i_s(&mut self) -> Option<(usize, usize, usize)> {
+    fn find_i_and_s(&mut self) -> Option<(usize, usize, usize)> {
         for i in 1..=self.max_recursion_elimination_num() {
-            if let Some(rule_i) = self
-                .rules
-                .iter()
-                .find(|it| it.borrow().recursion_elimination_num() == i)
-            {
+            if let Some(rule_i) = self.try_find_rule_by_recursion_num(i) {
                 for s in 0..i {
                     assert_ne!(s, i);
-                    if let Some(rule_s) = self
-                        .rules
-                        .iter()
-                        .find(|it| it.borrow().recursion_elimination_num() == s)
-                    {
+                    if let Some(rule_s) = self.try_find_rule_by_recursion_num(s) {
                         for (rule_i_alt_num, rule_i_alt) in
                             rule_i.borrow().alternatives.iter().enumerate()
                         {
@@ -292,13 +297,29 @@ impl Rules {
         &self,
         recursion_num: usize,
     ) -> Rc<RefCell<Rule>> {
+        return self
+            .try_find_rule_by_recursion_num(recursion_num)
+            .expect(&format!("no rule with recursion num: {}", recursion_num));
+    }
+
+    fn try_find_rule_by_recursion_num(
+        &self,
+        recursion_num: usize,
+    ) -> Option<Rc<RefCell<Rule>>> {
         for r in &self.rules {
             if r.borrow().recursion_elimination_num() == recursion_num {
-                return Rc::clone(r);
+                return Some(Rc::clone(r));
             }
         }
-        panic!("no rule with recursion num: {}", recursion_num);
+
+        None
     }
+
+
+    pub fn eliminate_left_recursions(&mut self) {
+        while self.eliminate_indirect_left_recursions0() {}
+    }
+
 
     pub fn is_valid(&self) -> Result<(), String> {
         if let Some(erroneous_rule) = self.rules.iter().find(|it| it.borrow().is_valid().is_err()) {
@@ -361,20 +382,6 @@ impl Rules {
     }
 
 
-    fn find_new_indexed_name(
-        &self,
-        name: &str,
-    ) -> String {
-        for i in 0..usize::MAX {
-            let new_name = format!("{}__{}", name, i);
-            if !self.has_rule(&new_name) {
-                return new_name;
-            }
-        }
-
-        panic!("indexes exhausted for: {}", name);
-    }
-
     fn max_recursion_elimination_num(&self) -> usize {
         get_recursion_elimination_numbers(self)
             .last()
@@ -436,14 +443,6 @@ fn merge_recursion_elimination_rule_to_number(
     }
 }
 
-fn get_recursion_elimination_rule_to_number(rules: &Rules) -> HashMap<String, usize> {
-    let mut numbers = HashMap::new();
-    for r in &rules.rules {
-        merge_recursion_elimination_rule_to_number(r, &mut numbers);
-    }
-    numbers
-}
-
 fn get_recursion_elimination_numbers(rules: &Rules) -> Vec<usize> {
     let mut numbers = HashMap::new();
     for r in &rules.rules {
@@ -491,11 +490,21 @@ fn_declaration  -> FN ID ( S ) { fn_call }
         GRAMMAR
     }
 
-    fn indirect_recursive_grammar() -> &'static str {
+    fn indirect_recursive_grammar0() -> &'static str {
         const GRAMMAR: &'static str = "
 a0 -> a1 a2 | FN
 a1 -> ID | a2 a0
 a2 -> RETURN | a0 a0
+";
+
+        GRAMMAR
+    }
+
+    fn indirect_recursive_grammar1() -> &'static str {
+        const GRAMMAR: &'static str = "
+a0 -> a1
+a1 -> a2 ID | ID
+a2 -> a1 RETURN
 ";
 
         GRAMMAR
@@ -550,7 +559,7 @@ Rules[
         EXPECTED.trim()
     }
 
-    fn expected_recursive_grammar_indirect_recursion_eliminated() -> &'static str {
+    fn expected_recursive_grammar_indirect_recursion_eliminated0() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
   Rule[a0 -> a1 a2 | FN]
@@ -563,12 +572,26 @@ Rules[
         EXPECTED.trim()
     }
 
+    fn expected_recursive_grammar_indirect_recursion_eliminated1() -> &'static str {
+        const EXPECTED: &'static str = "\
+Rules[
+  Rule[a0 -> a1]
+  Rule[a1 -> a2 ID | ID]
+  Rule[a2 -> ID RETURN a2__0]
+  Rule[a2__0 -> ID RETURN a2__0 | ]
+]
+        ";
+
+        EXPECTED.trim()
+    }
+
 
     #[test]
     fn test_parse() {
         let rules: Result<Rules, String> = proper_grammar().try_into();
         let rules = rules.unwrap();
 
+        assert!(rules.is_valid().is_ok());
         assert_eq!(rules.to_string().trim(), expected_proper_grammar())
     }
 
@@ -584,30 +607,56 @@ Rules[
 
         rules.eliminate_direct_left_recursions();
 
+        assert!(rules.is_valid().is_ok());
+
         assert_eq!(
             rules.to_string().trim(),
             expected_recursive_grammar_recursion_eliminated()
         )
     }
 
-    #[test]
-    fn test_eliminate_indirect_left_recursions() {
-        let rules: Result<Rules, String> = indirect_recursive_grammar().try_into();
+    // #[test]
+    fn test_eliminate_indirect_left_recursions0() {
+        let rules: Result<Rules, String> = indirect_recursive_grammar0().try_into();
         let mut rules = rules.unwrap();
 
         let before = rules.to_string();
 
-        rules.eliminate_indirect_left_recursions();
+        rules.eliminate_left_recursions();
 
-        println!("\n=======================\n");
+        assert!(rules.is_valid().is_ok());
+
         println!(
             "expected: {}",
-            expected_recursive_grammar_indirect_recursion_eliminated()
+            expected_recursive_grammar_indirect_recursion_eliminated0()
         );
         println!("before: {}", before);
         println!("after: {}", rules.to_string().trim());
         assert_eq!(
-            expected_recursive_grammar_indirect_recursion_eliminated(),
+            expected_recursive_grammar_indirect_recursion_eliminated0(),
+            rules.to_string().trim(),
+        )
+    }
+
+    #[test]
+    fn test_eliminate_indirect_left_recursions1() {
+        let rules: Result<Rules, String> = indirect_recursive_grammar1().try_into();
+        let mut rules = rules.unwrap();
+
+        let before = rules.to_string();
+
+        rules.eliminate_left_recursions();
+
+        assert!(rules.is_valid().is_ok());
+
+        println!(
+            "expected: {}",
+            expected_recursive_grammar_indirect_recursion_eliminated1()
+        );
+        println!("before: {}", before);
+        println!("after: {}", rules.to_string().trim());
+        assert_eq!(
+            expected_recursive_grammar_indirect_recursion_eliminated1(),
             rules.to_string().trim(),
         )
     }
