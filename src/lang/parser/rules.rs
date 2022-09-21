@@ -615,6 +615,7 @@ Rules[
         )
     }
 
+    // TODO make sure the the output is correct, adjust the expected output and enable the test.
     // #[test]
     fn test_eliminate_indirect_left_recursions0() {
         let rules: Result<Rules, String> = indirect_recursive_grammar0().try_into();

@@ -392,7 +392,7 @@ mod tests {
     use crate::lang::lexer::token::TokenKind;
 
     #[test]
-    fn test() {
+    fn test_id0() {
         let lexer: Lexer = "hello\nwhatever".into();
         let mut i = 0;
         for x in lexer.into_iter() {
@@ -405,6 +405,27 @@ mod tests {
                 1 => {
                     assert_eq!(x.token_kind, TokenKind::Id);
                     assert_eq!(x.line, 2);
+                },
+                _ => panic!(),
+            }
+            i += 1;
+        }
+    }
+
+    #[test]
+    fn test_fn_and_id() {
+        let lexer: Lexer = "fn my_thing42".into();
+        let mut i = 0;
+        for x in lexer.into_iter() {
+            let x = x.unwrap();
+            match i {
+                0 => {
+                    assert_eq!(x.token_kind, TokenKind::Fun);
+                    assert_eq!(x.line, 1);
+                },
+                1 => {
+                    assert_eq!(x.token_kind, TokenKind::Id);
+                    assert_eq!(x.line, 1);
                 },
                 _ => panic!(),
             }

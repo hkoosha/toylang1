@@ -81,7 +81,7 @@ impl TokenKind {
             "fn" | "fun" => Ok(Self::Fun),
             "return" => Ok(Self::Return),
             "int" | "integer" => Ok(Self::Integer),
-            "string" => Ok(Self::String),
+            "txt" | "string" => Ok(Self::String),
             "leftparen" => Ok(Self::LeftParen),
             "rightparen" => Ok(Self::RightParen),
             "leftbraces" => Ok(Self::LeftBraces),

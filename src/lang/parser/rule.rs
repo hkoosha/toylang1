@@ -55,6 +55,17 @@ impl RulePart {
         }
     }
 
+    pub fn get_token_kind(&self) -> &TokenKind {
+        match self {
+            RulePart::Rule(rule) => panic!(
+                "rule is not a token kind: {}",
+                rule.try_borrow()
+                    .map_or_else(|_| "?".to_string(), |it| it.name.to_string())
+            ),
+            RulePart::Token(tk) => tk,
+        }
+    }
+
     pub fn name(&self) -> String {
         match self {
             RulePart::Rule(rule) => rule.borrow().name.to_string(),
@@ -202,11 +213,11 @@ impl Rule {
                 })
                 .filter(|it| !set.contains(it))
                 .collect::<Vec<_>>();
-            let shit: Vec<String> = set.iter().cloned().collect();
+            let thing: Vec<String> = set.iter().cloned().collect();
             return Err(format!(
                 "duplicates: {} - {}",
                 list.join(", "),
-                shit.join(", ")
+                thing.join(", ")
             ));
         }
 
@@ -303,6 +314,12 @@ impl Into<RulePart> for Rule {
 }
 
 impl Into<RulePart> for Rc<RefCell<Rule>> {
+    fn into(self) -> RulePart {
+        RulePart::Rule(self)
+    }
+}
+
+impl Into<RulePart> for &Rc<RefCell<Rule>> {
     fn into(self) -> RulePart {
         RulePart::Rule(Rc::clone(&self))
     }
