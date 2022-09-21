@@ -20,12 +20,12 @@ const GRAMMAR: &str = "
 
 S               -> fn_call | fn_declaration
 fn_call         -> ID ( args ) ;
-args            -> arg , args | arg
+args            -> arg , args | arg |
 arg             -> TXT | INT | ID
 fn_declaration  -> FN ID ( params ) { statements }
-params          -> param , params | param
+params          -> param , params | param |
 param           -> ID ID
-statements      -> statement statements | statement
+statements      -> statement statements | statement |
 statement       -> declaration | assignment | fn_call | ret
 declaration     -> ID ID ;
 assignment      -> ID = expressions ;

@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 pub enum TokenKind {
     Error,
     EOF,
+    Epsilon,
     Id,
     Fun,
     Return,
@@ -26,10 +27,11 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn values() -> [Self; 20] {
+    pub fn values() -> [Self; 21] {
         [
             Self::Error,
             Self::EOF,
+            Self::Epsilon,
             Self::Id,
             Self::Fun,
             Self::Return,
@@ -53,6 +55,7 @@ impl TokenKind {
 
     pub fn from_repr(repr: &str) -> Result<Self, String> {
         match repr {
+            "" => Ok(Self::Epsilon),
             "fn" => Ok(Self::Fun),
             "return" => Ok(Self::Return),
             "(" => Ok(Self::LeftParen),
@@ -77,6 +80,7 @@ impl TokenKind {
         match repr.to_lowercase().as_str() {
             "error" => Ok(Self::Error),
             "eof" => Ok(Self::EOF),
+            "epsilon" => Ok(Self::Epsilon),
             "id" => Ok(Self::Id),
             "fn" | "fun" => Ok(Self::Fun),
             "return" => Ok(Self::Return),
@@ -102,6 +106,7 @@ impl TokenKind {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Error => "error",
+            Self::Epsilon => "epsilon",
             Self::EOF => "EOF",
             Self::Id => "id",
             Self::Fun => "function",
@@ -128,6 +133,7 @@ impl TokenKind {
         match self {
             Self::Error => "ERROR",
             Self::EOF => "EOF",
+            Self::Epsilon => "EPSILON",
             Self::Id => "ID",
             Self::Fun => "FUNCTION",
             Self::Return => "RETURN",
@@ -135,7 +141,7 @@ impl TokenKind {
             Self::String => "STRING",
             Self::LeftParen => "LEFT_PAREN",
             Self::RightParen => "RIGHT_PAREN",
-            Self::LeftBraces => "LEF_BRACES",
+            Self::LeftBraces => "LEFT_BRACES",
             Self::RightBraces => "RIGHT_BRACES",
             Self::LeftBracket => "LEFT_BRACKETS",
             Self::RightBracket => "RIGHT_BRACKETS",

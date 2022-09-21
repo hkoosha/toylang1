@@ -321,7 +321,7 @@ impl Into<RulePart> for Rc<RefCell<Rule>> {
 
 impl Into<RulePart> for &Rc<RefCell<Rule>> {
     fn into(self) -> RulePart {
-        RulePart::Rule(Rc::clone(&self))
+        RulePart::Rule(Rc::clone(self))
     }
 }
 

@@ -13,19 +13,21 @@ pub struct Node<'a> {
     pub parent: Option<Rc<RefCell<Node<'a>>>>,
     pub children: Vec<Rc<RefCell<Node<'a>>>>,
 
-    // TODO use phantom field instead.
-    _dummy: bool,
+    num: usize,
 }
 
 impl Node<'_> {
-    pub fn new(rule_part: RulePart) -> Self {
+    pub fn new(
+        rule_part: RulePart,
+        num: usize,
+    ) -> Self {
         let mut node = Self {
             rule_part,
             alt_no: None,
             token: None,
             parent: None,
             children: vec![],
-            _dummy: false,
+            num,
         };
 
         if node.rule_part.is_rule() && node.has_next_alt() {
@@ -105,6 +107,11 @@ impl Node<'_> {
             Some(alt_no) => alt_no,
         }
     }
+
+
+    pub fn num(&self) -> usize {
+        self.num
+    }
 }
 
 impl<'a> Into<Rc<RefCell<Node<'a>>>> for Node<'a> {
@@ -113,21 +120,16 @@ impl<'a> Into<Rc<RefCell<Node<'a>>>> for Node<'a> {
     }
 }
 
-impl From<RulePart> for Node<'_> {
-    fn from(rule_part: RulePart) -> Self {
-        Node::new(rule_part)
-    }
-}
 
 pub fn display_of(node: &Rc<RefCell<Node<'_>>>) -> String {
     let mut display = String::new();
-    display_of0(&node, &mut display, 0);
+    display_of0(node, &mut display, 0);
     display
 }
 
 fn display_of0(
     node: &Rc<RefCell<Node<'_>>>,
-    mut display: &mut String,
+    display: &mut String,
     level: usize,
 ) {
     if level > 0 {
@@ -149,6 +151,6 @@ fn display_of0(
         display.push(']');
     }
     for child in &node.borrow().children {
-        display_of0(&child, &mut display, level + 1);
+        display_of0(child, display, level + 1);
     }
 }
