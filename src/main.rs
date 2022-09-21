@@ -1,4 +1,5 @@
 use toylang1::lang::lexer::v0::Lexer;
+use toylang1::lang::parser::node::display_of;
 use toylang1::lang::parser::rules::Rules;
 use toylang1::lang::parser_impl::backtracking_parser::parse;
 
@@ -50,7 +51,9 @@ fn main() -> Result<(), String> {
     rules.eliminate_left_recursions();
     rules.is_valid()?;
 
-    parse(&rules, tokens.into_iter())?;
+    let parsed = parse(&rules, tokens.into_iter())?;
+    let display = display_of(&parsed);
+    println!("parsed: {}", display);
 
     Ok(())
 }

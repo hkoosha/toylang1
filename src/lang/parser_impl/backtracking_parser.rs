@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use log::trace;
+
 use crate::lang::lexer::token::Token;
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::node::display_of;
@@ -17,14 +19,14 @@ enum MatchKind {
 }
 
 fn print_stack(stack: &[Rc<RefCell<Node>>]) {
-    println!(
+    trace!(
         "<<<<<<<<<<<<<<<<<<<<<<<<<<<< stack: {}",
         stack
             .iter()
             .map(|it| it.borrow().rule_part.name() + "-" + &it.borrow().num().to_string())
             .collect::<Vec<_>>()
             .join(", ")
-    )
+    );
 }
 
 fn is_non_terminal_with_alt(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
@@ -37,7 +39,7 @@ fn is_token_match(
     node: &Option<Rc<RefCell<Node<'_>>>>,
     word: &Option<Token<'_>>,
 ) -> MatchKind {
-    println!(
+    trace!(
         "TRYING TO MATCH: {} <==> {}",
         node.as_ref()
             .map(|it| it.borrow().rule_part.name())
@@ -80,22 +82,16 @@ fn backtrack_push_back<'a>(
     stack: &mut Vec<Rc<RefCell<Node>>>,
 ) {
     if !focus.borrow().children.is_empty() {
-        println!(
-            "FUCKING OFF CHILDREN OF: {}",
-            focus.borrow().rule_part.name()
-        );
-        let len = focus.borrow().children.len();
+        trace!("KILLING CHILDREN OF: {}", focus.borrow().rule_part.name());
         for child in focus.borrow().children.iter().rev() {
             backtrack_push_back(Rc::clone(child), tokens, stack);
         }
-        print_stack(stack);
-        println!(">>>>>>>>>> {}", len);
         print_stack(stack);
     }
     else if focus.borrow().token.is_some() {
         let mut push_back: Option<Token<'a>> = None;
         std::mem::swap(&mut push_back, &mut focus.borrow_mut().token);
-        println!(
+        trace!(
             "///////////////////////> putting back ::: {} ({})",
             push_back.map_or("None", |it| it.text),
             focus.borrow().rule_part.name()
@@ -119,7 +115,7 @@ fn backtrack<'a>(
     stack: &mut Vec<Rc<RefCell<Node>>>,
 ) -> Result<Option<Rc<RefCell<Node<'a>>>>, String> {
     //
-    println!(
+    trace!(
         "NO MATCH backtracking:\n{}\n>>>>>>>>",
         display_of(focus.as_ref().unwrap())
     );
@@ -130,23 +126,23 @@ fn backtrack<'a>(
         && !focus.borrow().has_next_alt()
         && focus.borrow().parent.is_none()
     {
-        println!("STRAIGHT TO HELL");
+        trace!("STRAIGHT TO HELL");
         Err(format!(
             "no more alt on: {}",
             focus.borrow().rule_part.name()
         ))
     }
     else {
-        println!("LET'S SEE");
+        trace!("LET'S SEE");
         backtrack_push_back(Rc::clone(&focus), tokens, stack);
 
         if !focus.borrow().rule_part.is_token() && focus.borrow().has_next_alt() {
-            println!("going next");
+            trace!("going next");
             focus.borrow_mut().next_alt();
             Ok(Some(focus))
         }
         else if focus.borrow().parent.is_some() {
-            println!(
+            trace!(
                 "going parent of: {} aka {}",
                 focus.borrow().rule_part.name(),
                 focus
@@ -168,7 +164,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
     rules: &Rules,
     tokens: T,
 ) -> Result<Rc<RefCell<Node<'a>>>, String> {
-    println!("matching against: {}", rules);
+    trace!("matching against: {}", rules);
 
     rules.is_valid()?;
 
@@ -178,7 +174,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
     // that we can rewind (is there any rewind-capable rust iterator? if yes let's use that).
     let mut tokens: Vec<Token<'a>> = tokens.rev().collect();
     let mut word = tokens.pop();
-    println!("starting with word: {:?}", word);
+    trace!("starting with word: {:?}", word);
 
     let root = {
         let rule_part: RulePart = rules.rules.first().unwrap().into();
@@ -216,27 +212,27 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
             }
             focus.as_mut().unwrap().borrow_mut().children = children;
             focus = stack.pop();
-            println!("===========================================================");
-            println!("AFTER\n{}", display_of(&root));
+            trace!("===========================================================");
+            trace!("AFTER\n{}", display_of(&root));
             print_stack(&stack);
-            println!("===========================================================");
+            trace!("===========================================================");
         }
         else if is_token_match(&focus, &word) == MatchKind::Epsilon {
-            println!("happy epsilon while at: {}", word.as_ref().unwrap().text);
+            trace!("happy epsilon while at: {}", word.as_ref().unwrap().text);
             focus = stack.pop();
             if focus.is_some() {
-                println!(
+                trace!(
                     "focus is now: {} vs: {:?}",
                     focus.as_ref().unwrap().borrow().rule_part.name(),
                     word,
                 );
             }
             else {
-                println!("focus is now: None, vs: {:?}", word);
+                trace!("focus is now: None, vs: {:?}", word);
             }
         }
         else if is_token_match(&focus, &word) == MatchKind::Match {
-            println!(
+            trace!(
                 "happy match: {} => {}",
                 focus.as_ref().unwrap().borrow().rule_part.name(),
                 word.as_ref().unwrap().text,
@@ -245,22 +241,22 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
             word = tokens.pop();
             focus = stack.pop();
             match &word {
-                None => println!("word is now: None"),
-                Some(word) => println!("word is now: {}", word.text),
+                None => trace!("word is now: None"),
+                Some(word) => trace!("word is now: {}", word.text),
             }
             if focus.is_some() {
-                println!(
+                trace!(
                     "focus is now: {} vs: {}",
                     focus.as_ref().unwrap().borrow().rule_part.name(),
                     word.map_or("None", |it| it.text),
                 );
             }
             else {
-                println!("focus is now: None, vs: {:?}", word);
+                trace!("focus is now: None, vs: {:?}", word);
             }
         }
         else if is_eof(&focus, &word) {
-            println!("fin!");
+            trace!("fin!");
             break String::with_capacity(0);
         }
         else {
