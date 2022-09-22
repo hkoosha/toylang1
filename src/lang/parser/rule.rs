@@ -252,6 +252,7 @@ impl Rule {
 
 impl Drop for Rule {
     fn drop(&mut self) {
+        // TODO Is this enough? or should we recurse into the list?
         self.alternatives.clear();
     }
 }

@@ -7,16 +7,9 @@ use crate::lang::lexer::token::Token;
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::node::display_of;
 use crate::lang::parser::node::Node;
+use crate::lang::parser::node::ParseError;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::parser::rules::Rules;
-
-// TODO remove this.
-#[derive(PartialEq, Eq)]
-enum MatchKind {
-    Match,
-    NoMatch,
-    Epsilon,
-}
 
 fn print_stack(stack: &[Rc<RefCell<Node>>]) {
     trace!(
@@ -38,7 +31,7 @@ fn is_non_terminal_with_alt(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
 fn is_token_match(
     node: &Option<Rc<RefCell<Node<'_>>>>,
     word: &Option<Token<'_>>,
-) -> MatchKind {
+) -> bool {
     trace!(
         "TRYING TO MATCH: {} <==> {}",
         node.as_ref()
@@ -51,21 +44,30 @@ fn is_token_match(
         Some(node) => {
             let node = node.borrow();
             if node.rule_part.is_token() {
-                if *node.rule_part.get_token_kind() == TokenKind::Epsilon {
-                    MatchKind::Epsilon
-                }
-                else if *node.rule_part.get_token_kind() == word.as_ref().unwrap().token_kind {
-                    MatchKind::Match
+                if word.is_some()
+                    && *node.rule_part.get_token_kind() == word.as_ref().unwrap().token_kind
+                {
+                    true
                 }
                 else {
-                    MatchKind::NoMatch
+                    false
                 }
             }
             else {
-                MatchKind::NoMatch
+                false
             }
         },
-        None => MatchKind::NoMatch,
+        None => false,
+    }
+}
+
+fn is_epsilon(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
+    match node {
+        None => false,
+        Some(node) => {
+            node.borrow().rule_part.is_token()
+                && *node.borrow().rule_part.get_token_kind() == TokenKind::Epsilon
+        },
     }
 }
 
@@ -163,18 +165,16 @@ fn backtrack<'a>(
 pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
     rules: &Rules,
     tokens: T,
-) -> Result<Rc<RefCell<Node<'a>>>, String> {
+) -> Result<Rc<RefCell<Node<'a>>>, ParseError<'a>> {
     trace!("matching against: {}", rules);
-
-    rules.is_valid()?;
-
-    let mut next_num = 0;
 
     // We're backtracking parser, one more inefficiency is that we need to collect into vector so
     // that we can rewind (is there any rewind-capable rust iterator? if yes let's use that).
     let mut tokens: Vec<Token<'a>> = tokens.rev().collect();
     let mut word = tokens.pop();
     trace!("starting with word: {:?}", word);
+
+    let mut next_num = 0;
 
     let root = {
         let rule_part: RulePart = rules.rules.first().unwrap().into();
@@ -183,6 +183,10 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
         let root: Rc<RefCell<Node<'a>>> = root.into();
         root
     };
+
+    if let Err(err) = &rules.is_valid() {
+        return Err(ParseError::new(&root, format!("invalid rules: {}", err)));
+    }
 
     let mut focus: Option<Rc<RefCell<Node>>> = Some(Rc::clone(&root));
     let mut stack: Vec<Rc<RefCell<Node>>> = vec![];
@@ -217,7 +221,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
             print_stack(&stack);
             trace!("===========================================================");
         }
-        else if is_token_match(&focus, &word) == MatchKind::Epsilon {
+        else if is_epsilon(&focus) {
             trace!("happy epsilon while at: {}", word.as_ref().unwrap().text);
             focus = stack.pop();
             if focus.is_some() {
@@ -231,7 +235,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
                 trace!("focus is now: None, vs: {:?}", word);
             }
         }
-        else if is_token_match(&focus, &word) == MatchKind::Match {
+        else if is_token_match(&focus, &word) {
             trace!(
                 "happy match: {} => {}",
                 focus.as_ref().unwrap().borrow().rule_part.name(),
@@ -275,6 +279,6 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
         Ok(root)
     }
     else {
-        Err(error)
+        Err(ParseError::new(&root, error))
     }
 }

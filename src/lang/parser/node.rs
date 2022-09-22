@@ -1,4 +1,7 @@
 use std::cell::RefCell;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::rc::Rc;
 
 use crate::lang::lexer::token::Token;
@@ -114,6 +117,15 @@ impl Node<'_> {
     }
 }
 
+impl Drop for Node<'_> {
+    fn drop(&mut self) {
+        self.parent = None;
+        // TODO is this needed?
+        // TODO is this enough? should we recurse?
+        self.children.clear();
+    }
+}
+
 impl<'a> Into<Rc<RefCell<Node<'a>>>> for Node<'a> {
     fn into(self) -> Rc<RefCell<Node<'a>>> {
         Rc::new(RefCell::new(self))
@@ -152,5 +164,49 @@ fn display_of0(
     }
     for child in &node.borrow().children {
         display_of0(child, display, level + 1);
+    }
+}
+
+
+pub struct ParseError<'a> {
+    partial_tree: Rc<RefCell<Node<'a>>>,
+    error: String,
+}
+
+impl<'a> ParseError<'a> {
+    pub fn new(
+        partial_tree: &Rc<RefCell<Node<'a>>>,
+        error: String,
+    ) -> Self {
+        Self {
+            partial_tree: Rc::clone(partial_tree),
+            error,
+        }
+    }
+
+    pub fn error(&self) -> &str {
+        &self.error
+    }
+
+    pub fn partial_tree(&self) -> &Rc<RefCell<Node<'a>>> {
+        &self.partial_tree
+    }
+}
+
+impl Debug for ParseError<'_> {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "ParseError[{}]", self.error)
+    }
+}
+
+impl Display for ParseError<'_> {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "ParseError[{}]", self.error)
     }
 }
