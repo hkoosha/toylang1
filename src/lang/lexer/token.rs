@@ -4,7 +4,6 @@ use std::fmt::Formatter;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum TokenKind {
     Error,
-    EOF,
     Epsilon,
     Id,
     Fun,
@@ -27,10 +26,9 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn values() -> [Self; 21] {
+    pub fn values() -> Vec<Self> {
         [
             Self::Error,
-            Self::EOF,
             Self::Epsilon,
             Self::Id,
             Self::Fun,
@@ -51,6 +49,7 @@ impl TokenKind {
             Self::Minus,
             Self::Plus,
         ]
+        .to_vec()
     }
 
     pub fn from_repr(repr: &str) -> Result<Self, String> {
@@ -79,7 +78,6 @@ impl TokenKind {
     pub fn from_name(repr: &str) -> Result<Self, String> {
         match repr.to_lowercase().as_str() {
             "error" => Ok(Self::Error),
-            "eof" => Ok(Self::EOF),
             "epsilon" => Ok(Self::Epsilon),
             "id" => Ok(Self::Id),
             "fn" | "fun" => Ok(Self::Fun),
@@ -107,7 +105,6 @@ impl TokenKind {
         match self {
             Self::Error => "error",
             Self::Epsilon => "epsilon",
-            Self::EOF => "EOF",
             Self::Id => "id",
             Self::Fun => "function",
             Self::Return => "return",
@@ -132,7 +129,6 @@ impl TokenKind {
     pub fn upper_name(&self) -> &'static str {
         match self {
             Self::Error => "ERROR",
-            Self::EOF => "EOF",
             Self::Epsilon => "EPSILON",
             Self::Id => "ID",
             Self::Fun => "FUNCTION",
