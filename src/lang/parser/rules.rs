@@ -411,18 +411,25 @@ impl Rules {
 
     // =========================================================================
 
-    pub fn find_first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+    pub fn find_first_set(
+        &self,
+        include_tokens: bool,
+    ) -> HashMap<String, HashSet<TokenKind>> {
         if let Err(err) = self.validate() {
             panic!("invalid rule: {}", err);
         }
 
         let mut first = HashMap::new();
 
+        let mut to_remove = HashSet::new();
         for token_kind in TokenKind::values() {
             first
                 .entry(token_kind.upper_name().to_string())
                 .or_insert_with(HashSet::new)
                 .insert(token_kind);
+            if !include_tokens {
+                to_remove.insert(token_kind.upper_name().to_string());
+            }
         }
 
         let mut any_change = false;
@@ -479,6 +486,9 @@ impl Rules {
             }
         }
 
+        for remove in to_remove {
+            first.remove(&remove);
+        }
         first
     }
 }
@@ -804,5 +814,20 @@ Rules[
         let rules = rules.unwrap();
         println!("{}", rules.to_string());
         rules.validate().unwrap();
+
+        let mut first = rules.find_first_set(false);
+
+        println!("{:?}", first);
+
+        assert_eq!(first.len(), 2);
+
+        let r0 = first.remove("r0").unwrap();
+        let r1 = first.remove("r1").unwrap();
+        assert_eq!(r0.len(), 2);
+        assert_eq!(r1.len(), 1);
+
+        assert!(r0.contains(&TokenKind::Epsilon));
+        assert!(r0.contains(&TokenKind::String));
+        assert!(r1.contains(&TokenKind::String));
     }
 }

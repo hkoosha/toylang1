@@ -113,9 +113,9 @@ fn main() -> Result<(), String> {
 
     println!("\n\n===================================================\n\n");
 
-    println!("RULES: {}", rules);
+    println!("RULES: {}\n", rules);
 
-    let first = rules.find_first_set();
+    let first = rules.find_first_set(false);
     for (name, f) in first {
         println!("first of {} => {:?}", name, f);
     }
