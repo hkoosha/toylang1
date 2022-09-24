@@ -121,12 +121,30 @@ impl Rules {
     }
 
 
-    fn eliminate_direct_left_recursions(&mut self) {
-        while self.eliminate_direct_left_recursions0() {}
+    // =========================================================================
+
+    fn max_recursion_elimination_num(&self) -> usize {
+        get_sorted_recursion_elimination_numbers(self)
+            .last()
+            .map_or(0, |it| *it)
+    }
+
+    fn find_new_indexed_name(
+        &self,
+        name: &str,
+    ) -> String {
+        for i in 0..usize::MAX {
+            let new_name = format!("{}__{}", name, i);
+            if !self.has_rule(&new_name) {
+                return new_name;
+            }
+        }
+
+        panic!("indexes exhausted for: {}", name);
     }
 
     fn eliminate_direct_left_recursions0(&mut self) -> bool {
-        if let Err(err) = self.is_valid() {
+        if let Err(err) = self.validate() {
             panic!("rules are not valid: {}", err);
         }
 
@@ -210,54 +228,30 @@ impl Rules {
             }
         }
 
-        if let Err(err) = self.is_valid() {
+        if let Err(err) = self.validate() {
             panic!("rules are not valid: {}", err);
         }
 
         any_change
     }
 
-    fn find_new_indexed_name(
+    fn eliminate_direct_left_recursions(&mut self) {
+        while self.eliminate_direct_left_recursions0() {}
+    }
+
+    // ---------------------------------
+
+    fn try_find_rule_by_recursion_num(
         &self,
-        name: &str,
-    ) -> String {
-        for i in 0..usize::MAX {
-            let new_name = format!("{}__{}", name, i);
-            if !self.has_rule(&new_name) {
-                return new_name;
+        recursion_num: usize,
+    ) -> Option<Rc<RefCell<Rule>>> {
+        for r in &self.rules {
+            if r.borrow().recursion_elimination_num() == recursion_num {
+                return Some(Rc::clone(r));
             }
         }
 
-        panic!("indexes exhausted for: {}", name);
-    }
-
-
-    fn eliminate_indirect_left_recursions0(&mut self) -> bool {
-        self.eliminate_direct_left_recursions();
-
-        let mut any_change = false;
-
-        if let Some((i, i_alt_index, s)) = self.find_i_and_s() {
-            let rule_i = self.find_rule_by_recursion_num(i);
-            let mut rule_i_alt = rule_i.borrow_mut().alternatives.remove(i_alt_index);
-
-            let recursive_call_to_rule_s = rule_i_alt.remove(0);
-            let rule_s = self.find_rule_by_recursion_num(s);
-            assert_eq!(recursive_call_to_rule_s.name(), rule_s.borrow().name());
-
-            for s_alt in &rule_s.borrow().alternatives {
-                let mut fix = s_alt.clone();
-                fix.append(&mut rule_i_alt.clone());
-                self.rules[i].borrow_mut().alternatives.push(fix);
-                any_change = true;
-            }
-        }
-
-        if let Err(err) = self.is_valid() {
-            panic!("rules are not valid: {}", err);
-        }
-
-        any_change
+        None
     }
 
     fn find_i_and_s(&mut self) -> Option<(usize, usize, usize)> {
@@ -293,28 +287,44 @@ impl Rules {
             .unwrap_or_else(|| panic!("no rule with recursion num: {}", recursion_num))
     }
 
-    fn try_find_rule_by_recursion_num(
-        &self,
-        recursion_num: usize,
-    ) -> Option<Rc<RefCell<Rule>>> {
-        for r in &self.rules {
-            if r.borrow().recursion_elimination_num() == recursion_num {
-                return Some(Rc::clone(r));
+    fn eliminate_indirect_left_recursions0(&mut self) -> bool {
+        self.eliminate_direct_left_recursions();
+
+        let mut any_change = false;
+
+        if let Some((i, i_alt_index, s)) = self.find_i_and_s() {
+            let rule_i = self.find_rule_by_recursion_num(i);
+            let mut rule_i_alt = rule_i.borrow_mut().alternatives.remove(i_alt_index);
+
+            let recursive_call_to_rule_s = rule_i_alt.remove(0);
+            let rule_s = self.find_rule_by_recursion_num(s);
+            assert_eq!(recursive_call_to_rule_s.name(), rule_s.borrow().name());
+
+            for s_alt in &rule_s.borrow().alternatives {
+                let mut fix = s_alt.clone();
+                fix.append(&mut rule_i_alt.clone());
+                self.rules[i].borrow_mut().alternatives.push(fix);
+                any_change = true;
             }
         }
 
-        None
-    }
+        if let Err(err) = self.validate() {
+            panic!("rules are not valid: {}", err);
+        }
 
+        any_change
+    }
 
     pub fn eliminate_left_recursions(&mut self) {
         while self.eliminate_indirect_left_recursions0() {}
     }
 
 
-    pub fn is_valid(&self) -> Result<(), String> {
-        if let Some(erroneous_rule) = self.rules.iter().find(|it| it.borrow().is_valid().is_err()) {
-            let err_str = erroneous_rule.borrow().is_valid().err().unwrap();
+    // =========================================================================
+
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(erroneous_rule) = self.rules.iter().find(|it| it.borrow().validate().is_err()) {
+            let err_str = erroneous_rule.borrow().validate().err().unwrap();
             return Err(format!(
                 "invalid rule, rule_name={} error={}",
                 erroneous_rule.borrow().name(),
@@ -322,18 +332,14 @@ impl Rules {
             ));
         }
 
-        if self
-            .rules
-            .iter()
-            .map(|it| it.borrow().name().to_string())
-            .collect::<HashSet<_>>()
-            .len()
-            != self.rules.len()
-        {
-            return Err("duplicate rules".to_string());
+        let mut seen = HashSet::new();
+        for r in &self.rules {
+            if !seen.insert(r.borrow().name().to_string()) {
+                return Err(format!("duplicate rule: {}", r.borrow().name()));
+            }
         }
 
-        let numbers = get_recursion_elimination_numbers(self);
+        let numbers = get_sorted_recursion_elimination_numbers(self);
         for i in 0..numbers.len() - 1 {
             if numbers[i] == numbers[i + 1] {
                 return Err(format!(
@@ -343,11 +349,41 @@ impl Rules {
             }
         }
 
+        fn find_missing_rule(
+            rules: &Rules,
+            r: &Rc<RefCell<Rule>>,
+            seen: &mut HashSet<String>,
+        ) -> Result<(), String> {
+            if !seen.insert(r.borrow().name().to_string()) {
+                return Ok(());
+            }
+
+            for alt in &r.borrow().alternatives {
+                for part in alt {
+                    if part.is_rule() {
+                        if !rules.has_rule(part.get_rule().borrow().name()) {
+                            return Err(format!(
+                                "missing rule: {}",
+                                part.get_rule().borrow().name()
+                            ));
+                        }
+                        find_missing_rule(rules, &part.get_rule(), seen)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        let mut seen = HashSet::new();
+        for r in &self.rules {
+            find_missing_rule(self, r, &mut seen)?
+        }
+
         Ok(())
     }
 
     pub fn get_error(&self) -> Option<String> {
-        let invalid = self.rules.iter().find(|it| it.borrow().is_valid().is_err());
+        let invalid = self.rules.iter().find(|it| it.borrow().validate().is_err());
         if invalid.is_some() {
             return Some(format!(
                 "invalid rule: {}",
@@ -373,10 +409,77 @@ impl Rules {
     }
 
 
-    fn max_recursion_elimination_num(&self) -> usize {
-        get_recursion_elimination_numbers(self)
-            .last()
-            .map_or(0, |it| *it)
+    // =========================================================================
+
+    pub fn find_first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        let mut first = HashMap::new();
+
+        for token_kind in TokenKind::values() {
+            first
+                .entry(token_kind.upper_name().to_string())
+                .or_insert_with(HashSet::new)
+                .insert(token_kind);
+        }
+
+        let mut any_change = false;
+        loop {
+            for rule in &self.rules {
+                for alt in &rule.borrow().alternatives {
+                    let mut rhs: HashSet<TokenKind> = first
+                        .entry(alt[0].name())
+                        .or_insert_with(HashSet::new)
+                        .iter()
+                        .filter(|it| **it != TokenKind::Epsilon)
+                        .cloned()
+                        .collect();
+
+                    let mut trailing = true;
+                    for part_no in 1..alt.len() - 1 {
+                        let part = &alt[part_no];
+                        let part_first = first.entry(part.name()).or_insert_with(HashSet::new);
+                        if part_first.contains(&TokenKind::Epsilon) {
+                            let next_part_first = first
+                                .entry(alt[part_no + 1].name())
+                                .or_insert_with(HashSet::new)
+                                .iter()
+                                .cloned();
+                            rhs.extend(next_part_first);
+                            rhs.remove(&TokenKind::Epsilon);
+                        }
+                        else {
+                            trailing = false;
+                            break;
+                        }
+                    }
+
+                    if trailing
+                        && first
+                            .entry(alt.last().unwrap().name())
+                            .or_insert_with(HashSet::new)
+                            .contains(&TokenKind::Epsilon)
+                    {
+                        rhs.insert(TokenKind::Epsilon);
+                    }
+
+                    let already = first
+                        .entry(rule.borrow().name().to_string())
+                        .or_insert_with(HashSet::new);
+                    let before_len = already.len();
+                    already.extend(rhs.into_iter());
+                    any_change = before_len != already.len();
+                }
+            }
+
+            if !any_change {
+                break;
+            }
+        }
+
+        first
     }
 }
 
@@ -386,6 +489,7 @@ impl Default for Rules {
     }
 }
 
+// FIXME worst implementation :/
 impl Display for Rules {
     fn fmt(
         &self,
@@ -397,8 +501,16 @@ impl Display for Rules {
 
         write!(f, "Rules[")?;
         for r in &self.rules {
-            write!(f, "\n  ")?;
-            write!(f, "{}", r.borrow())?;
+            let stringify = r.borrow().to_string();
+            let mut split = stringify.split("->");
+            let name = split.next().unwrap().trim();
+            let desc = split.next().unwrap().trim();
+            write!(
+                f,
+                "\n  {: <20} -> {}",
+                &name[5..].trim(),              // Remove starting 'Rules['
+                &desc[..desc.len() - 1].trim(), // Remove ending ']'
+            )?;
         }
         write!(f, "\n]")
     }
@@ -440,7 +552,7 @@ fn merge_recursion_elimination_rule_to_number(
     }
 }
 
-fn get_recursion_elimination_numbers(rules: &Rules) -> Vec<usize> {
+fn get_sorted_recursion_elimination_numbers(rules: &Rules) -> Vec<usize> {
     let mut numbers = HashMap::new();
     for r in &rules.rules {
         merge_recursion_elimination_rule_to_number(r, &mut numbers);
@@ -588,7 +700,7 @@ Rules[
         let rules: Result<Rules, String> = proper_grammar().try_into();
         let rules = rules.unwrap();
 
-        assert!(rules.is_valid().is_ok());
+        assert!(rules.validate().is_ok());
         assert_eq!(rules.to_string().trim(), expected_proper_grammar())
     }
 
@@ -604,7 +716,7 @@ Rules[
 
         rules.eliminate_direct_left_recursions();
 
-        assert!(rules.is_valid().is_ok());
+        assert!(rules.validate().is_ok());
 
         assert_eq!(
             rules.to_string().trim(),
@@ -622,7 +734,7 @@ Rules[
 
         rules.eliminate_left_recursions();
 
-        assert!(rules.is_valid().is_ok());
+        assert!(rules.validate().is_ok());
 
         println!(
             "expected: {}",
@@ -645,7 +757,7 @@ Rules[
 
         rules.eliminate_left_recursions();
 
-        assert!(rules.is_valid().is_ok());
+        assert!(rules.validate().is_ok());
 
         println!(
             "expected: {}",
@@ -666,7 +778,7 @@ Rules[
         let rules: Result<Rules, String> = r.try_into();
         let rules = rules.unwrap();
         println!("{}", rules.to_string());
-        rules.is_valid().unwrap();
+        rules.validate().unwrap();
 
         assert_eq!(
             rules.to_string().trim(),

@@ -33,7 +33,7 @@ pub(super) fn ensure_is_valid_rule_name(rule_name: &str) -> Result<&str, String>
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Eq)]
 pub enum RulePart {
     Rule(Rc<RefCell<Rule>>),
     Token(TokenKind),
@@ -92,6 +92,33 @@ impl Debug for RulePart {
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl PartialEq for RulePart {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        match self {
+            RulePart::Rule(my_rule) => match other {
+                RulePart::Rule(other_rule) => my_rule.borrow().name == other_rule.borrow().name,
+                RulePart::Token(_) => false,
+            },
+            RulePart::Token(my_token_kind) => match other {
+                RulePart::Rule(_) => false,
+                RulePart::Token(other_token_kind) => my_token_kind == other_token_kind,
+            },
+        }
+    }
+}
+
+impl Hash for RulePart {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name().hash(state);
     }
 }
 
@@ -181,7 +208,7 @@ impl Rule {
         self.alternatives.len()
     }
 
-    pub fn is_valid(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         let set = self
             .alternatives
             .iter()
@@ -195,7 +222,6 @@ impl Rule {
                     .join("-")
             })
             .collect::<HashSet<_>>();
-
 
         // Duplicate rule in alternatives.
         if set.len() != self.alternatives.len() {
@@ -243,6 +269,21 @@ impl Rule {
                 "pointless rule: a singly sub-rule refers to the same rule, self={}",
                 self
             ));
+        }
+
+        if self
+            .alternatives
+            .iter()
+            .any(|it| it.len() > 1 && it.contains(&RulePart::Token(TokenKind::Epsilon)))
+        {
+            return Err(format!(
+                "alternative with len more than 1 contains epsilon, self={}",
+                self
+            ));
+        }
+
+        if self.alternatives.is_empty() {
+            return Err(format!("empty rule, self={}", self));
         }
 
         Ok(())
@@ -393,7 +434,7 @@ mod tests {
 
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r1 | r0 r1]");
 
-        r0.borrow().is_valid().unwrap();
+        r0.borrow().validate().unwrap();
     }
 
 
@@ -413,7 +454,7 @@ mod tests {
 
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r1]");
 
-        r0.borrow().is_valid().unwrap();
+        r0.borrow().validate().unwrap();
     }
 
 

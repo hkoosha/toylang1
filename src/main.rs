@@ -51,7 +51,7 @@ fn correct_program(rules: &Rules) -> Result<(), String> {
     // Parsed successfully above, ok to unwrap.
     let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
 
-    let parsed = parse(&rules, tokens.into_iter());
+    let parsed = parse(rules, tokens.into_iter());
 
     match parsed {
         Ok(parse_tree) => {
@@ -76,7 +76,7 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
     // Parsed successfully above, ok to unwrap.
     let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
 
-    let parsed = parse(&rules, tokens.into_iter());
+    let parsed = parse(rules, tokens.into_iter());
 
     match parsed {
         Ok(parse_tree) => {
@@ -100,13 +100,22 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
 fn main() -> Result<(), String> {
     let mut rules: Rules = GRAMMAR.try_into()?;
     rules.eliminate_left_recursions();
-    rules.is_valid()?;
+    rules.validate()?;
 
     println!("\n\n===================================================\n\n");
     correct_program(&rules)?;
 
     println!("\n\n===================================================\n\n");
     incorrect_program(&rules)?;
+
+    println!("\n\n===================================================\n\n");
+
+    println!("RULES: {}", rules);
+
+    let first = rules.find_first_set();
+    for (name, f) in first {
+        println!("first of {} => {:?}", name, f);
+    }
 
     println!("\n\n");
 

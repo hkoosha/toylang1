@@ -44,14 +44,8 @@ fn is_token_match(
         Some(node) => {
             let node = node.borrow();
             if node.rule_part.is_token() {
-                if word.is_some()
+                word.is_some()
                     && *node.rule_part.get_token_kind() == word.as_ref().unwrap().token_kind
-                {
-                    true
-                }
-                else {
-                    false
-                }
             }
             else {
                 false
@@ -104,11 +98,8 @@ fn backtrack_push_back<'a>(
         }
     }
 
-    *stack = stack
-        .into_iter()
-        .map(|it| Rc::clone(it))
-        .filter(|it| it.borrow().num() != focus.borrow().num())
-        .collect();
+    let num = focus.borrow().num();
+    stack.retain_mut(|it| it.borrow().num() != num);
 }
 
 fn backtrack<'a>(
@@ -184,7 +175,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
         root
     };
 
-    if let Err(err) = &rules.is_valid() {
+    if let Err(err) = &rules.validate() {
         return Err(ParseError::new(&root, format!("invalid rules: {}", err)));
     }
 
