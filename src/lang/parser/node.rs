@@ -126,9 +126,9 @@ impl Drop for Node<'_> {
     }
 }
 
-impl<'a> Into<Rc<RefCell<Node<'a>>>> for Node<'a> {
-    fn into(self) -> Rc<RefCell<Node<'a>>> {
-        Rc::new(RefCell::new(self))
+impl<'a> From<Node<'a>> for Rc<RefCell<Node<'a>>> {
+    fn from(node: Node<'a>) -> Self {
+        Rc::new(RefCell::new(node))
     }
 }
 

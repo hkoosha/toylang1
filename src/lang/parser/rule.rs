@@ -343,33 +343,27 @@ impl Eq for Rule {
 }
 
 
-impl Into<RulePart> for TokenKind {
-    fn into(self) -> RulePart {
-        RulePart::Token(self)
+impl From<TokenKind> for RulePart {
+    fn from(tk: TokenKind) -> Self {
+        RulePart::Token(tk)
     }
 }
 
-impl Into<RulePart> for Rule {
-    fn into(self) -> RulePart {
-        RulePart::Rule(self.into())
+impl From<Rc<RefCell<Rule>>> for RulePart {
+    fn from(rule: Rc<RefCell<Rule>>) -> Self {
+        RulePart::Rule(rule)
     }
 }
 
-impl Into<RulePart> for Rc<RefCell<Rule>> {
-    fn into(self) -> RulePart {
-        RulePart::Rule(self)
+impl From<&Rc<RefCell<Rule>>> for RulePart {
+    fn from(rule: &Rc<RefCell<Rule>>) -> Self {
+        RulePart::Rule(Rc::clone(rule))
     }
 }
 
-impl Into<RulePart> for &Rc<RefCell<Rule>> {
-    fn into(self) -> RulePart {
-        RulePart::Rule(Rc::clone(self))
-    }
-}
-
-impl Into<Rc<RefCell<Rule>>> for Rule {
-    fn into(self) -> Rc<RefCell<Rule>> {
-        Rc::new(RefCell::new(self))
+impl From<Rule> for Rc<RefCell<Rule>> {
+    fn from(rule: Rule) -> Self {
+        Rc::new(RefCell::new(rule))
     }
 }
 
@@ -469,7 +463,7 @@ mod tests {
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0]");
         assert!(r0
             .borrow()
-            .is_valid()
+            .validate()
             .err()
             .unwrap()
             .starts_with("infinitely recursive rule"),);
@@ -496,7 +490,7 @@ mod tests {
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 r2]");
         assert!(r0
             .borrow()
-            .is_valid()
+            .validate()
             .err()
             .unwrap()
             .starts_with("infinitely recursive rule"),);
@@ -524,7 +518,7 @@ mod tests {
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 | r2]");
         assert!(r0
             .borrow()
-            .is_valid()
+            .validate()
             .err()
             .unwrap()
             .starts_with("pointless rule"),);

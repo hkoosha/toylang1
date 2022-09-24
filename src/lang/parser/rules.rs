@@ -623,22 +623,23 @@ a2 -> a1 RETURN
     fn expected_proper_grammar() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  Rule[S -> fn_call | fn_declaration]
-  Rule[fn_call -> ID ( args ) ;]
-  Rule[fn_declaration -> FN ID ( params ) { statements }]
-  Rule[args -> arg , args | arg]
-  Rule[arg -> STRING | INTEGER | ID]
-  Rule[params -> param , params | param]
-  Rule[statements -> statement , statements | statement]
-  Rule[param -> ID ID]
-  Rule[statement -> declaration | assignment | fn_call | ret]
-  Rule[declaration -> ID ID ;]
-  Rule[assignment -> ID = expressions ;]
-  Rule[ret -> RETURN expressions ;]
-  Rule[expressions -> terms + expressions | terms - expressions | terms]
-  Rule[terms -> factor * terms | factor / terms | factor]
-  Rule[factor -> ( expressions ) | INTEGER | ID]
-]";
+  S                    -> fn_call | fn_declaration
+  fn_call              -> ID ( args ) ;
+  fn_declaration       -> FN ID ( params ) { statements }
+  args                 -> arg , args | arg
+  arg                  -> STRING | INTEGER | ID
+  params               -> param , params | param
+  statements           -> statement , statements | statement
+  param                -> ID ID
+  statement            -> declaration | assignment | fn_call | ret
+  declaration          -> ID ID ;
+  assignment           -> ID = expressions ;
+  ret                  -> RETURN expressions ;
+  expressions          -> terms + expressions | terms - expressions | terms
+  terms                -> factor * terms | factor / terms | factor
+  factor               -> ( expressions ) | INTEGER | ID
+]
+";
 
         EXPECTED.trim()
     }
@@ -646,9 +647,9 @@ Rules[
     fn expected_recursive_grammar() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  Rule[S -> S fn_call | ID | S fn_declaration | RETURN]
-  Rule[fn_call -> ID ( ID ) ;]
-  Rule[fn_declaration -> FN ID ( S ) { fn_call }]
+  S                    -> S fn_call | ID | S fn_declaration | RETURN
+  fn_call              -> ID ( ID ) ;
+  fn_declaration       -> FN ID ( S ) { fn_call }
 ]
 ";
 
@@ -658,10 +659,10 @@ Rules[
     fn expected_recursive_grammar_recursion_eliminated() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  Rule[S -> ID S__0 | RETURN S__0]
-  Rule[fn_call -> ID ( ID ) ;]
-  Rule[fn_declaration -> FN ID ( S ) { fn_call }]
-  Rule[S__0 -> fn_call S__0 | fn_declaration S__0 | ]
+  S                    -> ID S__0 | RETURN S__0
+  fn_call              -> ID ( ID ) ;
+  fn_declaration       -> FN ID ( S ) { fn_call }
+  S__0                 -> fn_call S__0 | fn_declaration S__0 |
 ]
         ";
 
@@ -684,10 +685,10 @@ Rules[
     fn expected_recursive_grammar_indirect_recursion_eliminated1() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  Rule[a0 -> a1]
-  Rule[a1 -> a2 ID | ID]
-  Rule[a2 -> ID RETURN a2__0]
-  Rule[a2__0 -> ID RETURN a2__0 | ]
+  a0                   -> a1
+  a1                   -> a2 ID | ID
+  a2                   -> ID RETURN a2__0
+  a2__0                -> ID RETURN a2__0 |
 ]
         ";
 
@@ -784,11 +785,24 @@ Rules[
             rules.to_string().trim(),
             "\
 Rules[
-  Rule[r0 -> r0 ID | EPSILON]
+  r0                   -> r0 ID | EPSILON
 ]
         "
             .trim()
             .to_string()
         )
+    }
+
+    #[test]
+    fn test_first_set() {
+        let r = "\
+        r0 -> r0 ID | r1 |
+        r1 -> STRING
+        ";
+
+        let rules: Result<Rules, String> = r.try_into();
+        let rules = rules.unwrap();
+        println!("{}", rules.to_string());
+        rules.validate().unwrap();
     }
 }

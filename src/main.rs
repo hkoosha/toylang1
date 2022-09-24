@@ -41,6 +41,7 @@ ret             -> RETURN expressions ;
 
 ";
 
+#[allow(clippy::needless_collect)]
 fn correct_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = SAMPLE_CORRECT_PROGRAM.into();
     for token in lexer {
@@ -66,6 +67,7 @@ fn correct_program(rules: &Rules) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(clippy::needless_collect)]
 fn incorrect_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
     for token in lexer {
@@ -97,6 +99,7 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(clippy::needless_collect)]
 fn main() -> Result<(), String> {
     let mut rules: Rules = GRAMMAR.try_into()?;
     rules.eliminate_left_recursions();
