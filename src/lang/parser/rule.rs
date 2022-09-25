@@ -169,7 +169,7 @@ impl Rule {
     }
 
     pub fn name(&self) -> &str {
-        self.name.as_str()
+        &self.name
     }
 
     pub fn recursion_elimination_num(&self) -> usize {

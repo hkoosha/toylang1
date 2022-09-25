@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -9,10 +10,12 @@ use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::rule::ensure_is_valid_rule_name;
 use crate::lang::parser::rule::Rule;
 use crate::lang::parser::rule::RulePart;
+use crate::lang::util::extend;
 
-#[derive(Eq, PartialEq)]
 pub struct Rules {
     pub rules: Vec<Rc<RefCell<Rule>>>,
+    first_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
+    follow_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
 }
 
 impl Rules {
@@ -23,6 +26,8 @@ impl Rules {
     pub fn from_rules(rules: Vec<Rc<RefCell<Rule>>>) -> Self {
         Self {
             rules,
+            first_set: Cell::new(None),
+            follow_set: Cell::new(None),
         }
     }
 
@@ -411,49 +416,56 @@ impl Rules {
 
     // =========================================================================
 
-    pub fn find_first_set(
-        &self,
-        include_tokens: bool,
-    ) -> HashMap<String, HashSet<TokenKind>> {
+    pub fn first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+        let cache = self.first_set.replace(None);
+        match cache {
+            None => {
+                let calc = self.first_set0();
+                self.first_set.replace(Some(calc.clone()));
+                calc
+            },
+            Some(cache) => {
+                let calc = cache.clone();
+                self.first_set.replace(Some(cache));
+                calc
+            },
+        }
+    }
+
+    fn first_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
         if let Err(err) = self.validate() {
             panic!("invalid rule: {}", err);
         }
 
         let mut first = HashMap::new();
 
-        let mut to_remove = HashSet::new();
         for token_kind in TokenKind::values() {
             first
                 .entry(token_kind.upper_name().to_string())
                 .or_insert_with(HashSet::new)
                 .insert(token_kind);
-            if !include_tokens {
-                to_remove.insert(token_kind.upper_name().to_string());
-            }
+        }
+
+        for rule in &self.rules {
+            first.insert(rule.borrow().name().to_string(), HashSet::new());
         }
 
         let mut any_change = false;
         loop {
             for rule in &self.rules {
                 for alt in &rule.borrow().alternatives {
-                    let mut rhs: HashSet<TokenKind> = first
-                        .entry(alt[0].name())
-                        .or_insert_with(HashSet::new)
+                    let mut rhs: HashSet<TokenKind> = first[&alt.first().unwrap().name()]
                         .iter()
-                        .filter(|it| **it != TokenKind::Epsilon)
+                        .filter(|it| !it.is_epsilon())
                         .cloned()
                         .collect();
 
                     let mut trailing = true;
                     for part_no in 1..alt.len() - 1 {
                         let part = &alt[part_no];
-                        let part_first = first.entry(part.name()).or_insert_with(HashSet::new);
+                        let part_first = &first[&part.name()];
                         if part_first.contains(&TokenKind::Epsilon) {
-                            let next_part_first = first
-                                .entry(alt[part_no + 1].name())
-                                .or_insert_with(HashSet::new)
-                                .iter()
-                                .cloned();
+                            let next_part_first = first[&alt[part_no + 1].name()].iter().cloned();
                             rhs.extend(next_part_first);
                             rhs.remove(&TokenKind::Epsilon);
                         }
@@ -463,18 +475,12 @@ impl Rules {
                         }
                     }
 
-                    if trailing
-                        && first
-                            .entry(alt.last().unwrap().name())
-                            .or_insert_with(HashSet::new)
-                            .contains(&TokenKind::Epsilon)
+                    if trailing && first[&alt.last().unwrap().name()].contains(&TokenKind::Epsilon)
                     {
                         rhs.insert(TokenKind::Epsilon);
                     }
 
-                    let already = first
-                        .entry(rule.borrow().name().to_string())
-                        .or_insert_with(HashSet::new);
+                    let already = first.get_mut(rule.borrow().name()).unwrap();
                     let before_len = already.len();
                     already.extend(rhs.into_iter());
                     any_change = before_len != already.len();
@@ -486,11 +492,81 @@ impl Rules {
             }
         }
 
-        for remove in to_remove {
-            first.remove(&remove);
-        }
         first
     }
+
+    pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+        let cache = self.follow_set.replace(None);
+        match cache {
+            None => {
+                let calc = self.follow_set0();
+                self.follow_set.replace(Some(calc.clone()));
+                calc
+            },
+            Some(cache) => {
+                let calc = cache.clone();
+                self.follow_set.replace(Some(cache));
+                calc
+            },
+        }
+    }
+
+    pub fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        let first = self.first_set();
+
+        let mut follow: HashMap<String, HashSet<TokenKind>> = self
+            .rules
+            .iter()
+            .map(|it| it.borrow().name().to_string())
+            .map(|it| (it, HashSet::<TokenKind>::new()))
+            .collect();
+
+        loop {
+            let mut any_change = false;
+
+            for rule in &self.rules {
+                for alt in &rule.borrow().alternatives {
+                    let mut trailer = follow[rule.borrow().name()].clone();
+
+                    for part in alt.iter().rev() {
+                        if part.is_rule() {
+                            let mut part_follow = follow.get_mut(&part.name()).unwrap();
+                            any_change = any_change || extend(&mut part_follow, trailer.clone());
+
+                            trailer = first[&part.name()].clone();
+                            trailer.remove(&TokenKind::Epsilon);
+                        }
+                        else {
+                            trailer.clear();
+                            trailer.insert(*part.get_token_kind());
+                        }
+                    }
+                }
+            }
+
+            if !any_change {
+                break;
+            }
+        }
+
+        follow
+    }
+}
+
+impl PartialEq for Rules {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.rules == other.rules
+    }
+}
+
+impl Eq for Rules {
 }
 
 impl Default for Rules {
@@ -815,7 +891,7 @@ Rules[
         println!("{}", rules.to_string());
         rules.validate().unwrap();
 
-        let mut first = rules.find_first_set(false);
+        let mut first = rules.first_set();
 
         println!("{:?}", first);
 

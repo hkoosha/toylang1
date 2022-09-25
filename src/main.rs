@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+
+use toylang1::lang::lexer::token::TokenKind;
 use toylang1::lang::lexer::v0::Lexer;
 use toylang1::lang::parser::node::display_of;
 use toylang1::lang::parser::rules::Rules;
@@ -115,9 +118,22 @@ fn main() -> Result<(), String> {
 
     println!("RULES: {}\n", rules);
 
-    let first = rules.find_first_set(false);
+    let first0 = rules.first_set();
+    let mut first = BTreeMap::new();
+    first.extend(first0);
     for (name, f) in first {
-        println!("first of {} => {:?}", name, f);
+        if TokenKind::from_name(&name).is_err() {
+            println!("first of {} => {:?}", name, f);
+        }
+    }
+
+    println!("\n\n===================================================\n\n");
+
+    let follow0 = rules.follow_set();
+    let mut follow = BTreeMap::new();
+    follow.extend(follow0);
+    for (name, f) in follow {
+        println!("follow of {} => {:?}", name, f);
     }
 
     println!("\n\n");

@@ -182,6 +182,10 @@ impl TokenKind {
     pub fn is_keyword(&self) -> bool {
         self.repr().is_some()
     }
+
+    pub fn is_epsilon(&self) -> bool {
+        *self == Self::Epsilon
+    }
 }
 
 impl Display for TokenKind {
