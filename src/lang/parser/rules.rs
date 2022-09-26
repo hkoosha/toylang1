@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -8,14 +7,16 @@ use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::rule::ensure_is_valid_rule_name;
+use crate::lang::parser::rule::AltRef;
 use crate::lang::parser::rule::Rule;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::util::extend;
 
 pub struct Rules {
     pub rules: Vec<Rc<RefCell<Rule>>>,
-    first_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
-    follow_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
+    first_set: RefCell<Option<HashMap<String, HashSet<TokenKind>>>>,
+    follow_set: RefCell<Option<HashMap<String, HashSet<TokenKind>>>>,
+    start_set: RefCell<Option<HashMap<AltRef, HashSet<TokenKind>>>>,
 }
 
 impl Rules {
@@ -26,8 +27,9 @@ impl Rules {
     pub fn from_rules(rules: Vec<Rc<RefCell<Rule>>>) -> Self {
         Self {
             rules,
-            first_set: Cell::new(None),
-            follow_set: Cell::new(None),
+            first_set: RefCell::new(None),
+            follow_set: RefCell::new(None),
+            start_set: RefCell::new(None),
         }
     }
 
@@ -439,19 +441,12 @@ impl Rules {
     // =========================================================================
 
     pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
-        let cache = self.follow_set.replace(None);
-        match cache {
-            None => {
-                let calc = self.follow_set0();
-                self.follow_set.replace(Some(calc.clone()));
-                calc
-            },
-            Some(cache) => {
-                let calc = cache.clone();
-                self.follow_set.replace(Some(cache));
-                calc
-            },
+        if self.follow_set.borrow().is_none() {
+            let calc = self.follow_set0();
+            self.follow_set.replace(Some(calc));
         }
+
+        self.follow_set.borrow().as_ref().unwrap().clone()
     }
 
     fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
@@ -501,19 +496,12 @@ impl Rules {
 
 
     pub fn first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
-        let cache = self.first_set.replace(None);
-        match cache {
-            None => {
-                let calc = self.first_set0();
-                self.first_set.replace(Some(calc.clone()));
-                calc
-            },
-            Some(cache) => {
-                let calc = cache.clone();
-                self.first_set.replace(Some(cache));
-                calc
-            },
+        if self.first_set.borrow().is_none() {
+            let calc = self.first_set0();
+            self.first_set.replace(Some(calc));
         }
+
+        self.first_set.borrow().as_ref().unwrap().clone()
     }
 
     fn first_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
@@ -534,8 +522,9 @@ impl Rules {
             first.insert(rule.borrow().name().to_string(), HashSet::new());
         }
 
-        let mut any_change = false;
         loop {
+            let mut any_change = false;
+
             for rule in &self.rules {
                 for alt in &rule.borrow().alternatives {
                     let mut rhs: HashSet<TokenKind> = first[&alt.first().unwrap().name()]
@@ -577,6 +566,51 @@ impl Rules {
         }
 
         first
+    }
+
+    pub fn start_set(&self) -> HashMap<AltRef, HashSet<TokenKind>> {
+        if self.start_set.borrow().is_none() {
+            let calc = self.start_set0();
+            self.start_set.replace(Some(calc));
+        }
+
+        return self.start_set.borrow().as_ref().unwrap().clone();
+    }
+
+    fn start_set0(&self) -> HashMap<AltRef, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        let first = self.first_set();
+        let follow = self.follow_set();
+
+        let mut start: HashMap<AltRef, HashSet<TokenKind>> = HashMap::new();
+
+        for rule in &self.rules {
+            for (alt_no, alt) in rule.borrow().alternatives.iter().enumerate() {
+                let mut alt_0_first = first[&alt[0].name()].clone();
+
+                let rule_start = if alt_0_first.contains(&TokenKind::Epsilon) {
+                    alt_0_first.remove(&TokenKind::Epsilon);
+                    extend(&mut alt_0_first, follow[rule.borrow().name()].clone());
+                    alt_0_first
+                }
+                else {
+                    alt_0_first
+                };
+
+                start.insert(AltRef::new(alt_no, rule), rule_start);
+            }
+        }
+
+        start
+    }
+
+
+    // =========================================================================
+
+    pub fn left_factor(&mut self) {
     }
 }
 

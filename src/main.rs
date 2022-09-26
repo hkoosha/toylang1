@@ -138,6 +138,16 @@ fn main() -> Result<(), String> {
         .into_iter()
         .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
 
+    println!("\n\n===================================================\n\n");
+
+    rules
+        .start_set()
+        .into_iter()
+        .map(|it| (it.0, it.1.into_iter().collect::<BTreeSet<_>>()))
+        .collect::<BTreeMap<_, _>>()
+        .into_iter()
+        .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
+
     println!("\n\n");
 
     Ok(())

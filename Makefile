@@ -39,3 +39,6 @@ t:
 verify:
 	cargo test
 
+.PHONY: clean
+clean:
+	cargo clean

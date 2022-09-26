@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -29,6 +30,78 @@ pub(super) fn ensure_is_valid_rule_name(rule_name: &str) -> Result<&str, String>
             "only non-empty alphanumeric names are accepted, given name={}",
             rule_name
         ))
+    }
+}
+
+
+#[derive(Eq, Clone)]
+pub struct AltRef {
+    alt_no: usize,
+    rule: Rc<RefCell<Rule>>,
+}
+
+impl AltRef {
+    pub fn new(
+        alt_no: usize,
+        rule: &Rc<RefCell<Rule>>,
+    ) -> Self {
+        Self {
+            alt_no,
+            rule: Rc::clone(rule),
+        }
+    }
+}
+
+impl PartialEq for AltRef {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.alt_no == other.alt_no && self.rule.borrow().name() == other.rule.borrow().name()
+    }
+}
+
+impl Display for AltRef {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "AltRef[{}#{}]", self.alt_no, self.rule.borrow().name())
+    }
+}
+
+impl Hash for AltRef {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.alt_no.hash(state);
+        self.rule.borrow().hash(state)
+    }
+}
+
+impl PartialOrd for AltRef {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
+        let my_num = self.rule.borrow().recursion_elimination_num;
+        let other_num = other.rule.borrow().recursion_elimination_num;
+        if my_num == other_num {
+            Some(self.alt_no.cmp(&other.alt_no))
+        }
+        else {
+            Some(my_num.cmp(&other_num))
+        }
+    }
+}
+
+impl Ord for AltRef {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
+        return self.partial_cmp(other).unwrap();
     }
 }
 
@@ -344,6 +417,25 @@ impl PartialEq for Rule {
 }
 
 impl Eq for Rule {
+}
+
+impl PartialOrd for Rule {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
+        self.recursion_elimination_num
+            .partial_cmp(&other.recursion_elimination_num)
+    }
+}
+
+impl Ord for Rule {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 
