@@ -212,7 +212,7 @@ impl<'a> Lexer<'a> {
                 },
                 '0'..='9' => {
                     self.scan_number()?;
-                    self.token_kind = TokenKind::Integer;
+                    self.token_kind = TokenKind::Int;
                     Ok(Some(true))
                 },
                 '"' => {
@@ -420,7 +420,7 @@ mod tests {
             let x = x.unwrap();
             match i {
                 0 => {
-                    assert_eq!(x.token_kind, TokenKind::Fun);
+                    assert_eq!(x.token_kind, TokenKind::Fn);
                     assert_eq!(x.line, 1);
                 },
                 1 => {
