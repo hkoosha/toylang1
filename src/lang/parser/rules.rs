@@ -645,7 +645,7 @@ impl Rules {
     }
 
     // Why this implementation? because it's late and I'm tired.
-    pub fn eliminate_left_common_prefix(&mut self) {
+    pub fn eliminate_left_common_prefix(&mut self) -> bool {
         self.clear_cache();
 
         let mut new_rule_to_add: Option<Rc<RefCell<Rule>>> = None;
@@ -752,8 +752,8 @@ impl Rules {
             }
         }
 
-        match new_rule_to_add {
-            None => {},
+        let any_change = match new_rule_to_add {
+            None => false,
             Some(new_rule) => {
                 for alt in &mut new_rule.borrow_mut().alternatives {
                     if alt.is_empty() {
@@ -766,10 +766,12 @@ impl Rules {
                 println!("NEW WORLD: {}", self);
 
                 self.eliminate_left_common_prefix();
+                true
             },
-        }
+        };
 
         self.clear_cache();
+        any_change
     }
 
     pub fn is_backtrack_free(&self) -> Result<(), String> {
@@ -808,6 +810,24 @@ impl Rules {
         }
 
         Ok(())
+    }
+
+
+    // =========================================================================
+
+    pub fn make_ready_for_recursive_decent(
+        &mut self,
+        max_loop: usize,
+    ) -> Result<(), String> {
+        for _ in 0..max_loop {
+            self.eliminate_left_recursions();
+            match self.eliminate_left_common_prefix() {
+                true => {},
+                false => return Ok(()),
+            }
+        }
+
+        Err("max loop reached but grammar was not fixed".to_string())
     }
 }
 
