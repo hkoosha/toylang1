@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::rule::ensure_is_valid_rule_name;
+use crate::lang::parser::rule::AltReference;
 use crate::lang::parser::rule::Rule;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::util::extend;
@@ -16,6 +17,8 @@ pub struct Rules {
     pub rules: Vec<Rc<RefCell<Rule>>>,
     first_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
     follow_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
+    first_set_by_alt_ref: Cell<Option<HashMap<AltReference, HashSet<TokenKind>>>>,
+    start_set: Cell<Option<HashMap<AltReference, HashSet<TokenKind>>>>,
 }
 
 impl Rules {
@@ -28,6 +31,8 @@ impl Rules {
             rules,
             first_set: Cell::new(None),
             follow_set: Cell::new(None),
+            start_set: Cell::new(None),
+            first_set_by_alt_ref: Cell::new(None),
         }
     }
 
@@ -149,10 +154,6 @@ impl Rules {
     }
 
     fn eliminate_direct_left_recursions0(&mut self) -> bool {
-        if let Err(err) = self.validate() {
-            panic!("rules are not valid: {}", err);
-        }
-
         let mut next = self.max_recursion_elimination_num() + 1;
         let mut num = move || {
             let n = next;
@@ -212,6 +213,7 @@ impl Rules {
                     new_rule.borrow_mut().alternatives = recursive_rules;
                     // epsilon rule.
                     new_rule.borrow_mut().add_alt();
+                    new_rule.borrow_mut().push_last(TokenKind::Epsilon.into());
 
                     for remaining_rule in &mut rule.borrow_mut().alternatives {
                         remaining_rule.push(RulePart::Rule(Rc::clone(&new_rule)))
@@ -321,7 +323,15 @@ impl Rules {
     }
 
     pub fn eliminate_left_recursions(&mut self) {
+        if let Err(err) = self.validate() {
+            panic!("rules are not valid: {}", err);
+        }
+
         while self.eliminate_indirect_left_recursions0() {}
+
+        if let Err(err) = self.validate() {
+            panic!("rules are not valid: {}", err);
+        }
     }
 
 
@@ -337,6 +347,7 @@ impl Rules {
             ));
         }
 
+        // Duplicate rule.
         let mut seen = HashSet::new();
         for r in &self.rules {
             if !seen.insert(r.borrow().name().to_string()) {
@@ -344,6 +355,7 @@ impl Rules {
             }
         }
 
+        // Duplicate recursion elimination number.
         let numbers = get_sorted_recursion_elimination_numbers(self);
         for i in 0..numbers.len() - 1 {
             if numbers[i] == numbers[i + 1] {
@@ -379,9 +391,24 @@ impl Rules {
             Ok(())
         }
 
+        // A missing rule referenced in another rule.
         let mut seen = HashSet::new();
         for r in &self.rules {
             find_missing_rule(self, r, &mut seen)?
+        }
+
+        for r in &self.rules {
+            if r.borrow().alternatives.is_empty() {
+                return Err(format!(
+                    "rule has has no alternative: {}",
+                    r.borrow().name()
+                ));
+            }
+            for alt in &r.borrow().alternatives {
+                if alt.is_empty() {
+                    return Err(format!("rule has empty alternative: {}", r.borrow().name()));
+                }
+            }
         }
 
         Ok(())
@@ -461,7 +488,7 @@ impl Rules {
                         .collect();
 
                     let mut trailing = true;
-                    for part_no in 1..alt.len() - 1 {
+                    for part_no in 0..alt.len() - 1 {
                         let part = &alt[part_no];
                         let part_first = &first[&part.name()];
                         if part_first.contains(&TokenKind::Epsilon) {
@@ -480,10 +507,9 @@ impl Rules {
                         rhs.insert(TokenKind::Epsilon);
                     }
 
-                    let already = first.get_mut(rule.borrow().name()).unwrap();
-                    let before_len = already.len();
-                    already.extend(rhs.into_iter());
-                    any_change = before_len != already.len();
+                    let mut rule_first: &mut HashSet<TokenKind> =
+                        first.get_mut(rule.borrow().name()).unwrap();
+                    any_change = extend(&mut rule_first, rhs);
                 }
             }
 
@@ -494,6 +520,7 @@ impl Rules {
 
         first
     }
+
 
     pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
         let cache = self.follow_set.replace(None);
@@ -511,7 +538,7 @@ impl Rules {
         }
     }
 
-    pub fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
+    fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
         if let Err(err) = self.validate() {
             panic!("invalid rule: {}", err);
         }
@@ -554,6 +581,117 @@ impl Rules {
         }
 
         follow
+    }
+
+
+    fn first_set_by_alt_ref(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
+        let cache = self.first_set_by_alt_ref.replace(None);
+        match cache {
+            None => {
+                let calc = self.first_set_by_alt_ref0();
+                self.first_set_by_alt_ref.replace(Some(calc.clone()));
+                calc
+            },
+            Some(cache) => {
+                let calc = cache.clone();
+                self.first_set_by_alt_ref.replace(Some(cache));
+                calc
+            },
+        }
+    }
+
+    fn first_set_by_alt_ref0(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        // let mut first = self.first_set();
+        let mut first_by_alt_ref: HashMap<AltReference, HashSet<TokenKind>> = HashMap::new();
+
+        for rule in &self.rules {
+            for (alt_no, alt) in rule.borrow().alternatives.iter().enumerate() {
+                let entry = first_by_alt_ref
+                    .entry(AltReference::new(rule.borrow().name().to_string(), alt_no))
+                    .or_insert_with(HashSet::new);
+
+                if alt[0].is_token() {
+                    entry.insert(*alt[0].get_token_kind());
+                }
+            }
+        }
+
+        todo!()
+    }
+
+
+    pub fn start_set(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
+        let cache = self.start_set.replace(None);
+        match cache {
+            None => {
+                let calc = self.start_set0();
+                self.start_set.replace(Some(calc.clone()));
+                calc
+            },
+            Some(cache) => {
+                let calc = cache.clone();
+                self.start_set.replace(Some(cache));
+                calc
+            },
+        }
+    }
+
+    fn start_set0(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        // let first = self.first_set();
+
+        let mut start: HashMap<AltReference, HashSet<TokenKind>> = HashMap::new();
+
+        for rule in &self.rules {
+            for (alt_no, alt) in rule.borrow().alternatives.iter().enumerate() {
+                let entry = start
+                    .entry(AltReference::new(rule.borrow().name().to_string(), alt_no))
+                    .or_insert_with(HashSet::new);
+
+                if alt[0].is_token() {
+                    entry.insert(*alt[0].get_token_kind());
+                }
+                else if alt[0].is_epsilon() {
+                }
+                else {
+                }
+            }
+        }
+
+        todo!()
+    }
+
+
+    pub fn is_backtrack_free(&self) -> bool {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        let first = self.first_set();
+        let follow = self.follow_set();
+
+        for rule in &self.rules {
+            for alt in &rule.borrow().alternatives {
+                let _start = if first[&alt[0].name()].contains(&TokenKind::Epsilon) {
+                    let mut alt_first = first[&alt[0].name()].clone();
+                    alt_first.remove(&TokenKind::Epsilon);
+                    let mut result = follow[rule.borrow().name()].clone();
+                    result.extend(alt_first);
+                    result
+                }
+                else {
+                    first[&alt[0].name()].clone()
+                };
+            }
+        }
+        true
     }
 }
 
@@ -713,7 +851,7 @@ Rules[
   fn_call              -> ID ( args ) ;
   fn_declaration       -> FN ID ( params ) { statements }
   args                 -> arg , args | arg
-  arg                  -> STRING | INTEGER | ID
+  arg                  -> STRING | INT | ID
   params               -> param , params | param
   statements           -> statement , statements | statement
   param                -> ID ID
@@ -723,7 +861,7 @@ Rules[
   ret                  -> RETURN expressions ;
   expressions          -> terms + expressions | terms - expressions | terms
   terms                -> factor * terms | factor / terms | factor
-  factor               -> ( expressions ) | INTEGER | ID
+  factor               -> ( expressions ) | INT | ID
 ]
 ";
 
@@ -748,7 +886,7 @@ Rules[
   S                    -> ID S__0 | RETURN S__0
   fn_call              -> ID ( ID ) ;
   fn_declaration       -> FN ID ( S ) { fn_call }
-  S__0                 -> fn_call S__0 | fn_declaration S__0 |
+  S__0                 -> fn_call S__0 | fn_declaration S__0 | EPSILON
 ]
         ";
 
@@ -774,7 +912,7 @@ Rules[
   a0                   -> a1
   a1                   -> a2 ID | ID
   a2                   -> ID RETURN a2__0
-  a2__0                -> ID RETURN a2__0 |
+  a2__0                -> ID RETURN a2__0 | EPSILON
 ]
         ";
 
@@ -801,6 +939,7 @@ Rules[
             rules.to_string().trim()
         );
 
+        println!("{}", rules);
         rules.eliminate_direct_left_recursions();
 
         assert!(rules.validate().is_ok());
@@ -860,7 +999,7 @@ Rules[
 
     #[test]
     fn test_epsilon_rule() {
-        let r = "r0 -> r0 ID | ";
+        let r = "r0 -> r0 ID | EPSILON";
 
         let rules: Result<Rules, String> = r.try_into();
         let rules = rules.unwrap();
@@ -882,7 +1021,7 @@ Rules[
     #[test]
     fn test_first_set() {
         let r = "\
-        r0 -> r0 ID | r1 |
+        r0 -> r0 ID | r1 | EPSILON
         r1 -> STRING
         ";
 
@@ -891,7 +1030,11 @@ Rules[
         println!("{}", rules.to_string());
         rules.validate().unwrap();
 
-        let mut first = rules.first_set();
+        let mut first: HashMap<String, HashSet<TokenKind>> = rules
+            .first_set()
+            .into_iter()
+            .filter(|it| TokenKind::from_name(&it.0).is_err())
+            .collect();
 
         println!("{:?}", first);
 
@@ -905,5 +1048,32 @@ Rules[
         assert!(r0.contains(&TokenKind::Epsilon));
         assert!(r0.contains(&TokenKind::String));
         assert!(r1.contains(&TokenKind::String));
+    }
+
+    #[test]
+    fn test_something() {
+        let r = "\
+        r0 -> r0 ID | r1 | r2
+        r1 -> STRING
+        r2 -> EPSILON
+        ";
+
+        let rules: Result<Rules, String> = r.try_into();
+        let mut rules = rules.unwrap();
+        rules.eliminate_left_recursions();
+        println!("{}", rules.to_string());
+
+        rules.validate().unwrap();
+
+        let first: HashMap<String, HashSet<TokenKind>> = rules
+            .first_set()
+            .into_iter()
+            .filter(|it| TokenKind::from_name(&it.0).is_err())
+            .collect();
+
+        let follow = rules.follow_set();
+
+        println!("{:?}", first);
+        println!("{:?}", follow);
     }
 }
