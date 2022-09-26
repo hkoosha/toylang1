@@ -33,25 +33,6 @@ pub(super) fn ensure_is_valid_rule_name(rule_name: &str) -> Result<&str, String>
 }
 
 
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct AltReference {
-    pub rule_name: String,
-    pub alt_no: usize,
-}
-
-impl AltReference {
-    pub fn new(
-        rule_name: String,
-        alt_no: usize,
-    ) -> Self {
-        Self {
-            rule_name,
-            alt_no,
-        }
-    }
-}
-
-
 #[derive(Clone, Eq)]
 pub enum RulePart {
     Rule(Rc<RefCell<Rule>>),

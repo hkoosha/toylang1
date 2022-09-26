@@ -8,7 +8,6 @@ use std::rc::Rc;
 
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::rule::ensure_is_valid_rule_name;
-use crate::lang::parser::rule::AltReference;
 use crate::lang::parser::rule::Rule;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::util::extend;
@@ -478,8 +477,8 @@ impl Rules {
 
                     for part in alt.iter().rev() {
                         if part.is_rule() {
-                            let mut part_follow = follow.get_mut(&part.name()).unwrap();
-                            any_change = any_change || extend(&mut part_follow, trailer.clone());
+                            let part_follow = follow.get_mut(&part.name()).unwrap();
+                            any_change = any_change || extend(part_follow, trailer.clone());
 
                             trailer = first[&part.name()].clone();
                             trailer.remove(&TokenKind::Epsilon);
@@ -566,9 +565,9 @@ impl Rules {
                         rhs.insert(TokenKind::Epsilon);
                     }
 
-                    let mut rule_first: &mut HashSet<TokenKind> =
+                    let rule_first: &mut HashSet<TokenKind> =
                         first.get_mut(rule.borrow().name()).unwrap();
-                    any_change = extend(&mut rule_first, rhs);
+                    any_change = extend(rule_first, rhs);
                 }
             }
 
