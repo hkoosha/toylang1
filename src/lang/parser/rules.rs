@@ -17,8 +17,6 @@ pub struct Rules {
     pub rules: Vec<Rc<RefCell<Rule>>>,
     first_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
     follow_set: Cell<Option<HashMap<String, HashSet<TokenKind>>>>,
-    first_set_by_alt_ref: Cell<Option<HashMap<AltReference, HashSet<TokenKind>>>>,
-    start_set: Cell<Option<HashMap<AltReference, HashSet<TokenKind>>>>,
 }
 
 impl Rules {
@@ -31,8 +29,6 @@ impl Rules {
             rules,
             first_set: Cell::new(None),
             follow_set: Cell::new(None),
-            start_set: Cell::new(None),
-            first_set_by_alt_ref: Cell::new(None),
         }
     }
 
@@ -443,85 +439,6 @@ impl Rules {
 
     // =========================================================================
 
-    pub fn first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
-        let cache = self.first_set.replace(None);
-        match cache {
-            None => {
-                let calc = self.first_set0();
-                self.first_set.replace(Some(calc.clone()));
-                calc
-            },
-            Some(cache) => {
-                let calc = cache.clone();
-                self.first_set.replace(Some(cache));
-                calc
-            },
-        }
-    }
-
-    fn first_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
-        if let Err(err) = self.validate() {
-            panic!("invalid rule: {}", err);
-        }
-
-        let mut first = HashMap::new();
-
-        for token_kind in TokenKind::values() {
-            first
-                .entry(token_kind.upper_name().to_string())
-                .or_insert_with(HashSet::new)
-                .insert(token_kind);
-        }
-
-        for rule in &self.rules {
-            first.insert(rule.borrow().name().to_string(), HashSet::new());
-        }
-
-        let mut any_change = false;
-        loop {
-            for rule in &self.rules {
-                for alt in &rule.borrow().alternatives {
-                    let mut rhs: HashSet<TokenKind> = first[&alt.first().unwrap().name()]
-                        .iter()
-                        .filter(|it| !it.is_epsilon())
-                        .cloned()
-                        .collect();
-
-                    let mut trailing = true;
-                    for part_no in 0..alt.len() - 1 {
-                        let part = &alt[part_no];
-                        let part_first = &first[&part.name()];
-                        if part_first.contains(&TokenKind::Epsilon) {
-                            let next_part_first = first[&alt[part_no + 1].name()].iter().cloned();
-                            rhs.extend(next_part_first);
-                            rhs.remove(&TokenKind::Epsilon);
-                        }
-                        else {
-                            trailing = false;
-                            break;
-                        }
-                    }
-
-                    if trailing && first[&alt.last().unwrap().name()].contains(&TokenKind::Epsilon)
-                    {
-                        rhs.insert(TokenKind::Epsilon);
-                    }
-
-                    let mut rule_first: &mut HashSet<TokenKind> =
-                        first.get_mut(rule.borrow().name()).unwrap();
-                    any_change = extend(&mut rule_first, rhs);
-                }
-            }
-
-            if !any_change {
-                break;
-            }
-        }
-
-        first
-    }
-
-
     pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
         let cache = self.follow_set.replace(None);
         match cache {
@@ -584,114 +501,83 @@ impl Rules {
     }
 
 
-    fn first_set_by_alt_ref(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
-        let cache = self.first_set_by_alt_ref.replace(None);
+    pub fn first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+        let cache = self.first_set.replace(None);
         match cache {
             None => {
-                let calc = self.first_set_by_alt_ref0();
-                self.first_set_by_alt_ref.replace(Some(calc.clone()));
+                let calc = self.first_set0();
+                self.first_set.replace(Some(calc.clone()));
                 calc
             },
             Some(cache) => {
                 let calc = cache.clone();
-                self.first_set_by_alt_ref.replace(Some(cache));
+                self.first_set.replace(Some(cache));
                 calc
             },
         }
     }
 
-    fn first_set_by_alt_ref0(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
+    fn first_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
         if let Err(err) = self.validate() {
             panic!("invalid rule: {}", err);
         }
 
-        // let mut first = self.first_set();
-        let mut first_by_alt_ref: HashMap<AltReference, HashSet<TokenKind>> = HashMap::new();
+        let mut first = HashMap::new();
+
+        for token_kind in TokenKind::values() {
+            first
+                .entry(token_kind.upper_name().to_string())
+                .or_insert_with(HashSet::new)
+                .insert(token_kind);
+        }
 
         for rule in &self.rules {
-            for (alt_no, alt) in rule.borrow().alternatives.iter().enumerate() {
-                let entry = first_by_alt_ref
-                    .entry(AltReference::new(rule.borrow().name().to_string(), alt_no))
-                    .or_insert_with(HashSet::new);
+            first.insert(rule.borrow().name().to_string(), HashSet::new());
+        }
 
-                if alt[0].is_token() {
-                    entry.insert(*alt[0].get_token_kind());
+        let mut any_change = false;
+        loop {
+            for rule in &self.rules {
+                for alt in &rule.borrow().alternatives {
+                    let mut rhs: HashSet<TokenKind> = first[&alt.first().unwrap().name()]
+                        .iter()
+                        .filter(|it| !it.is_epsilon())
+                        .cloned()
+                        .collect();
+
+                    let mut trailing = true;
+
+                    for part_no in 0..alt.len() - 1 {
+                        let part = &alt[part_no];
+                        let part_first = &first[&part.name()];
+                        if part_first.contains(&TokenKind::Epsilon) {
+                            let next_part_first = first[&alt[part_no + 1].name()].iter().cloned();
+                            rhs.extend(next_part_first);
+                            rhs.remove(&TokenKind::Epsilon);
+                        }
+                        else {
+                            trailing = false;
+                            break;
+                        }
+                    }
+
+                    if trailing && first[&alt.last().unwrap().name()].contains(&TokenKind::Epsilon)
+                    {
+                        rhs.insert(TokenKind::Epsilon);
+                    }
+
+                    let mut rule_first: &mut HashSet<TokenKind> =
+                        first.get_mut(rule.borrow().name()).unwrap();
+                    any_change = extend(&mut rule_first, rhs);
                 }
+            }
+
+            if !any_change {
+                break;
             }
         }
 
-        todo!()
-    }
-
-
-    pub fn start_set(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
-        let cache = self.start_set.replace(None);
-        match cache {
-            None => {
-                let calc = self.start_set0();
-                self.start_set.replace(Some(calc.clone()));
-                calc
-            },
-            Some(cache) => {
-                let calc = cache.clone();
-                self.start_set.replace(Some(cache));
-                calc
-            },
-        }
-    }
-
-    fn start_set0(&self) -> HashMap<AltReference, HashSet<TokenKind>> {
-        if let Err(err) = self.validate() {
-            panic!("invalid rule: {}", err);
-        }
-
-        // let first = self.first_set();
-
-        let mut start: HashMap<AltReference, HashSet<TokenKind>> = HashMap::new();
-
-        for rule in &self.rules {
-            for (alt_no, alt) in rule.borrow().alternatives.iter().enumerate() {
-                let entry = start
-                    .entry(AltReference::new(rule.borrow().name().to_string(), alt_no))
-                    .or_insert_with(HashSet::new);
-
-                if alt[0].is_token() {
-                    entry.insert(*alt[0].get_token_kind());
-                }
-                else if alt[0].is_epsilon() {
-                }
-                else {
-                }
-            }
-        }
-
-        todo!()
-    }
-
-
-    pub fn is_backtrack_free(&self) -> bool {
-        if let Err(err) = self.validate() {
-            panic!("invalid rule: {}", err);
-        }
-
-        let first = self.first_set();
-        let follow = self.follow_set();
-
-        for rule in &self.rules {
-            for alt in &rule.borrow().alternatives {
-                let _start = if first[&alt[0].name()].contains(&TokenKind::Epsilon) {
-                    let mut alt_first = first[&alt[0].name()].clone();
-                    alt_first.remove(&TokenKind::Epsilon);
-                    let mut result = follow[rule.borrow().name()].clone();
-                    result.extend(alt_first);
-                    result
-                }
-                else {
-                    first[&alt[0].name()].clone()
-                };
-            }
-        }
-        true
+        first
     }
 }
 
