@@ -127,6 +127,13 @@ impl Rules {
         Ok(Self::from_rules(rules))
     }
 
+    // =========================================================================
+
+    fn clear_cache(&mut self) {
+        *self.first_set.borrow_mut() = None;
+        *self.follow_set.borrow_mut() = None;
+        *self.start_set.borrow_mut() = None;
+    }
 
     // =========================================================================
 
@@ -151,6 +158,8 @@ impl Rules {
     }
 
     fn eliminate_direct_left_recursions0(&mut self) -> bool {
+        self.clear_cache();
+
         let mut next = self.max_recursion_elimination_num() + 1;
         let mut num = move || {
             let n = next;
@@ -240,6 +249,8 @@ impl Rules {
     }
 
     fn eliminate_direct_left_recursions(&mut self) {
+        self.clear_cache();
+
         while self.eliminate_direct_left_recursions0() {}
     }
 
@@ -292,6 +303,8 @@ impl Rules {
     }
 
     fn eliminate_indirect_left_recursions0(&mut self) -> bool {
+        self.clear_cache();
+
         self.eliminate_direct_left_recursions();
 
         let mut any_change = false;
@@ -320,6 +333,8 @@ impl Rules {
     }
 
     pub fn eliminate_left_recursions(&mut self) {
+        self.clear_cache();
+
         if let Err(err) = self.validate() {
             panic!("rules are not valid: {}", err);
         }
@@ -440,61 +455,6 @@ impl Rules {
 
     // =========================================================================
 
-    pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
-        if self.follow_set.borrow().is_none() {
-            let calc = self.follow_set0();
-            self.follow_set.replace(Some(calc));
-        }
-
-        self.follow_set.borrow().as_ref().unwrap().clone()
-    }
-
-    fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
-        if let Err(err) = self.validate() {
-            panic!("invalid rule: {}", err);
-        }
-
-        let first = self.first_set();
-
-        let mut follow: HashMap<String, HashSet<TokenKind>> = self
-            .rules
-            .iter()
-            .map(|it| it.borrow().name().to_string())
-            .map(|it| (it, HashSet::<TokenKind>::new()))
-            .collect();
-
-        loop {
-            let mut any_change = false;
-
-            for rule in &self.rules {
-                for alt in &rule.borrow().alternatives {
-                    let mut trailer = follow[rule.borrow().name()].clone();
-
-                    for part in alt.iter().rev() {
-                        if part.is_rule() {
-                            let part_follow = follow.get_mut(&part.name()).unwrap();
-                            any_change = any_change || extend(part_follow, trailer.clone());
-
-                            trailer = first[&part.name()].clone();
-                            trailer.remove(&TokenKind::Epsilon);
-                        }
-                        else {
-                            trailer.clear();
-                            trailer.insert(*part.get_token_kind());
-                        }
-                    }
-                }
-            }
-
-            if !any_change {
-                break;
-            }
-        }
-
-        follow
-    }
-
-
     pub fn first_set(&self) -> HashMap<String, HashSet<TokenKind>> {
         if self.first_set.borrow().is_none() {
             let calc = self.first_set0();
@@ -568,6 +528,62 @@ impl Rules {
         first
     }
 
+
+    pub fn follow_set(&self) -> HashMap<String, HashSet<TokenKind>> {
+        if self.follow_set.borrow().is_none() {
+            let calc = self.follow_set0();
+            self.follow_set.replace(Some(calc));
+        }
+
+        self.follow_set.borrow().as_ref().unwrap().clone()
+    }
+
+    fn follow_set0(&self) -> HashMap<String, HashSet<TokenKind>> {
+        if let Err(err) = self.validate() {
+            panic!("invalid rule: {}", err);
+        }
+
+        let first = self.first_set();
+
+        let mut follow: HashMap<String, HashSet<TokenKind>> = self
+            .rules
+            .iter()
+            .map(|it| it.borrow().name().to_string())
+            .map(|it| (it, HashSet::<TokenKind>::new()))
+            .collect();
+
+        loop {
+            let mut any_change = false;
+
+            for rule in &self.rules {
+                for alt in &rule.borrow().alternatives {
+                    let mut trailer = follow[rule.borrow().name()].clone();
+
+                    for part in alt.iter().rev() {
+                        if part.is_rule() {
+                            let part_follow = follow.get_mut(&part.name()).unwrap();
+                            any_change = any_change || extend(part_follow, trailer.clone());
+
+                            trailer = first[&part.name()].clone();
+                            trailer.remove(&TokenKind::Epsilon);
+                        }
+                        else {
+                            trailer.clear();
+                            trailer.insert(*part.get_token_kind());
+                        }
+                    }
+                }
+            }
+
+            if !any_change {
+                break;
+            }
+        }
+
+        follow
+    }
+
+
     pub fn start_set(&self) -> HashMap<AltRef, HashSet<TokenKind>> {
         if self.start_set.borrow().is_none() {
             let calc = self.start_set0();
@@ -610,7 +626,188 @@ impl Rules {
 
     // =========================================================================
 
-    pub fn left_factor(&mut self) {
+    fn cmp_prefix(
+        alt0: &Vec<RulePart>,
+        alt1: &Vec<RulePart>,
+        len: usize,
+    ) -> bool {
+        if alt0.len() < len || alt1.len() < len {
+            return false;
+        }
+
+        for i in 0..len {
+            if alt0[i].name() != alt1[i].name() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    // Why this implementation? because it's late and I'm tired.
+    pub fn eliminate_left_common_prefix(&mut self) {
+        self.clear_cache();
+
+        let mut new_rule_to_add: Option<Rc<RefCell<Rule>>> = None;
+        'exit: for rule in &self.rules {
+            if rule.borrow().alternatives.len() < 2 {
+                continue;
+            }
+
+            let mut prefix_len: Option<usize> = None;
+            let mut alt_index: Option<usize> = None;
+
+            'outer: for i in 0..rule.borrow().alternatives.len() - 1 {
+                let alt0 = &rule.borrow().alternatives[i];
+
+                for len in (1..alt0.len()).rev() {
+                    for j in (i + 1)..rule.borrow().alternatives.len() {
+                        let alt1 = &rule.borrow().alternatives[j];
+
+                        if alt0 == alt1 {
+                            unreachable!("comparing same rule to itself!");
+                        }
+
+                        if Self::cmp_prefix(alt0, alt1, len) {
+                            prefix_len = Some(len);
+                            alt_index = Some(i);
+
+                            println!(
+                                "PREFIX_LEN={}, ALT_INDEX={}\nalt0={:?}\nalt1={:?}",
+                                len, i, alt0, alt1
+                            );
+
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+
+            match prefix_len {
+                None => {},
+                Some(len) => {
+                    println!("PREFIX LEN: {}", len);
+
+                    let mut new_rule = {
+                        let new_name = self.find_new_indexed_name(rule.borrow().name());
+                        let recursion_num = self.max_recursion_elimination_num() + 1;
+                        let mut new_rule = Rule::new(new_name, recursion_num);
+                        new_rule.add_alt();
+                        new_rule
+                    };
+
+                    let (common_prefix, suffix) = {
+                        let mut work_alt =
+                            rule.borrow_mut().alternatives.remove(alt_index.unwrap());
+                        let (common_prefix, suffix) = work_alt.split_at_mut(len);
+                        let common_prefix = common_prefix.to_vec();
+                        let suffix = suffix.to_vec();
+                        (common_prefix, suffix)
+                    };
+
+                    for s in suffix {
+                        new_rule.push_last(s);
+                    }
+
+                    let new_rule: Rc<RefCell<Rule>> = new_rule.into();
+
+                    let mut replace = common_prefix.clone();
+                    replace.push(RulePart::Rule(new_rule.clone()));
+                    rule.borrow_mut()
+                        .alternatives
+                        .insert(alt_index.unwrap(), replace);
+
+                    loop {
+                        let mut index: Option<usize> = None;
+                        for rest_index in (alt_index.unwrap() + 1)..rule.borrow().alternatives.len()
+                        {
+                            let alt = &rule.borrow().alternatives[rest_index];
+                            if Self::cmp_prefix(&common_prefix, &alt, len) {
+                                index = Some(rest_index);
+                                break;
+                            }
+                        }
+
+                        match index {
+                            None => break,
+                            Some(index) => {
+                                let suffix = {
+                                    let mut work_alt = rule.borrow_mut().alternatives.remove(index);
+                                    let (_, suffix) = work_alt.split_at_mut(len);
+                                    let suffix = suffix.to_vec();
+                                    suffix
+                                };
+
+                                new_rule.borrow_mut().add_alt();
+                                for s in suffix {
+                                    new_rule.borrow_mut().push_last(s);
+                                }
+                            },
+                        }
+                    }
+
+                    new_rule_to_add = Some(new_rule);
+                    break 'exit;
+                },
+            }
+        }
+
+        match new_rule_to_add {
+            None => {},
+            Some(new_rule) => {
+                for alt in &mut new_rule.borrow_mut().alternatives {
+                    if alt.is_empty() {
+                        alt.push(RulePart::Token(TokenKind::Epsilon));
+                    }
+                }
+
+                self.rules.push(new_rule);
+
+                println!("NEW WORLD: {}", self);
+
+                self.eliminate_left_common_prefix();
+            },
+        }
+
+        self.clear_cache();
+    }
+
+    pub fn is_backtrack_free(&self) -> Result<(), String> {
+        let start = self.start_set();
+
+        for r in &self.rules {
+            if r.borrow().alternatives.len() < 2 {
+                continue;
+            }
+
+            let alt_starts: HashMap<_, _> = (0..r.borrow().alternatives.len())
+                .map(|alt_no| AltRef::new(alt_no, r))
+                .map(|alt_ref| (alt_ref.alt_no(), start[&alt_ref].clone()))
+                .collect();
+
+            println!("SHIT IS: {:?}", r.borrow().alternatives);
+
+            for i in 1..r.borrow().alternatives.len() {
+                for j in 0..i {
+                    let set0 = &alt_starts[&i];
+                    let set1 = &alt_starts[&j];
+                    if set0.intersection(set1).count() > 0 {
+                        println!("BAD WORLD: {}", self);
+                        return Err(format!(
+                            "alts intersect, rule={} i={}, j={} => {:?} <> {:?} = {:?}",
+                            r.borrow().name(),
+                            i,
+                            j,
+                            set0,
+                            set1,
+                            set0.intersection(set1),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

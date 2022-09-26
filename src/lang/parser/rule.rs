@@ -50,6 +50,10 @@ impl AltRef {
             rule: Rc::clone(rule),
         }
     }
+
+    pub fn alt_no(&self) -> usize {
+        self.alt_no
+    }
 }
 
 impl PartialEq for AltRef {
@@ -66,7 +70,7 @@ impl Display for AltRef {
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
-        write!(f, "AltRef[{}#{}]", self.alt_no, self.rule.borrow().name())
+        write!(f, "AltRef[{}#{}]", self.rule.borrow().name(), self.alt_no)
     }
 }
 
@@ -101,7 +105,7 @@ impl Ord for AltRef {
         &self,
         other: &Self,
     ) -> Ordering {
-        return self.partial_cmp(other).unwrap();
+        self.partial_cmp(other).unwrap()
     }
 }
 

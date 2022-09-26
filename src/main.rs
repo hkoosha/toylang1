@@ -148,6 +148,13 @@ fn main() -> Result<(), String> {
         .into_iter()
         .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
 
+    println!("\n\n===================================================\n\n");
+
+    rules.eliminate_left_common_prefix();
+    println!("RULES: {}\n", rules);
+
+    rules.is_backtrack_free()?;
+
     println!("\n\n");
 
     Ok(())
