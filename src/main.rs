@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use toylang1::lang::lexer::token::TokenKind;
 use toylang1::lang::lexer::v0::Lexer;
@@ -29,7 +30,7 @@ const GRAMMAR: &str = "
 S               -> fn_call | fn_declaration
 fn_call         -> ID ( args ) ;
 args            -> arg , args | arg |
-arg             -> TXT | INT | ID
+arg             -> STRING | INT | ID
 fn_declaration  -> FN ID ( params ) { statements }
 params          -> param , params | param |
 param           -> ID ID
@@ -118,23 +119,24 @@ fn main() -> Result<(), String> {
 
     println!("RULES: {}\n", rules);
 
-    let first0 = rules.first_set();
-    let mut first = BTreeMap::new();
-    first.extend(first0);
-    for (name, f) in first {
-        if TokenKind::from_name(&name).is_err() {
-            println!("first of {} => {:?}", name, f);
-        }
-    }
+    rules
+        .first_set()
+        .into_iter()
+        .filter(|it| TokenKind::from_name(&it.0).is_err())
+        .map(|it| (it.0, it.1.into_iter().collect::<BTreeSet<_>>()))
+        .collect::<BTreeMap<_, _>>()
+        .into_iter()
+        .for_each(|it| println!("first of {} => {:?}", it.0, it.1));
 
     println!("\n\n===================================================\n\n");
 
-    let follow0 = rules.follow_set();
-    let mut follow = BTreeMap::new();
-    follow.extend(follow0);
-    for (name, f) in follow {
-        println!("follow of {} => {:?}", name, f);
-    }
+    rules
+        .follow_set()
+        .into_iter()
+        .map(|it| (it.0, it.1.into_iter().collect::<BTreeSet<_>>()))
+        .collect::<BTreeMap<_, _>>()
+        .into_iter()
+        .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
 
     println!("\n\n");
 
