@@ -252,7 +252,7 @@ impl Rules {
                     let set1 = &alt_starts[&j];
                     if set0.intersection(set1).count() > 0 {
                         return Err(format!(
-                                "alts intersect, rule={} i={}, j={} => {:?} <vs> {:?}, intersection={:?}",
+                                "grammar is not backtrack free, alts intersect, rule={} i={}, j={} => {:?} <vs> {:?}, intersection={:?}",
                                 r.borrow().name(),
                                 i,
                                 j,
