@@ -35,9 +35,7 @@ fn_declaration  -> FN ID ( params ) { statements }
 params          -> param , params | param |
 param           -> ID ID
 statements      -> statement statements | statement |
-statement       -> declaration | assignment | fn_call | ret
-declaration     -> ID ID ;
-assignment      -> ID = expressions ;
+statement       -> ID ID ; | ID = expressions ; | fn_call | ret
 expressions     -> terms + expressions | terms - expressions | terms
 terms           -> factor * terms | factor / terms | factor
 factor          -> ( expressions ) | INT | ID

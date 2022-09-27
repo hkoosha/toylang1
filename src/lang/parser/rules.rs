@@ -127,12 +127,176 @@ impl Rules {
         Ok(Self::from_rules(rules))
     }
 
+
+    pub fn validate(&self) -> Result<(), String> {
+        for r in &self.rules {
+            if let Err(err) = r.borrow().validate() {
+                return Err(format!(
+                    "invalid rule, rule_name={} error={}, rule={}",
+                    r.borrow().name(),
+                    err,
+                    r.borrow(),
+                ));
+            }
+        }
+
+        // Duplicate rule.
+        let mut seen = HashSet::new();
+        for r in &self.rules {
+            if !seen.insert(r.borrow().name().to_string()) {
+                return Err(format!("duplicate rule: {}", r.borrow().name()));
+            }
+        }
+
+        // Duplicate recursion elimination number.
+        let numbers = get_sorted_recursion_elimination_numbers(self);
+        for i in 0..numbers.len() - 1 {
+            if numbers[i] == numbers[i + 1] {
+                return Err(format!(
+                    "duplicate recursion elimination rule: {}",
+                    numbers[i]
+                ));
+            }
+        }
+
+        fn find_missing_rule(
+            rules: &Rules,
+            r: &Rc<RefCell<Rule>>,
+            seen: &mut HashSet<String>,
+        ) -> Result<(), String> {
+            if !seen.insert(r.borrow().name().to_string()) {
+                return Ok(());
+            }
+
+            for alt in &r.borrow().alternatives {
+                for part in alt {
+                    if part.is_rule() {
+                        if !rules.has_rule(part.get_rule().borrow().name()) {
+                            return Err(format!(
+                                "missing rule: {}",
+                                part.get_rule().borrow().name()
+                            ));
+                        }
+                        find_missing_rule(rules, &part.get_rule(), seen)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        // A missing rule referenced in another rule.
+        let mut seen = HashSet::new();
+        for r in &self.rules {
+            find_missing_rule(self, r, &mut seen)?
+        }
+
+        for r in &self.rules {
+            if r.borrow().alternatives.is_empty() {
+                return Err(format!(
+                    "rule has has no alternative: {}",
+                    r.borrow().name()
+                ));
+            }
+            for alt in &r.borrow().alternatives {
+                if alt.is_empty() {
+                    return Err(format!("rule has empty alternative: {}", r.borrow().name()));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_error(&self) -> Option<String> {
+        let invalid = self.rules.iter().find(|it| it.borrow().validate().is_err());
+        if invalid.is_some() {
+            return Some(format!(
+                "invalid rule: {}",
+                invalid.unwrap().borrow().name()
+            ));
+        }
+
+        let mut seen = HashSet::new();
+        for i in &self.rules {
+            if seen.contains(i.borrow().name()) {
+                return Some(format!("duplicate rule: {}", i.borrow().name()));
+            }
+            seen.insert(i.borrow().name().to_string());
+        }
+        None
+    }
+
+    pub fn has_rule(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.rules.iter().any(|it| it.borrow().name() == name)
+    }
+
+    pub fn is_backtrack_free(&self) -> Result<(), String> {
+        let start = self.start_set();
+
+        for r in &self.rules {
+            if r.borrow().alternatives.len() < 2 {
+                continue;
+            }
+
+            let alt_starts: HashMap<_, _> = (0..r.borrow().alternatives.len())
+                .map(|alt_no| AltRef::new(alt_no, r))
+                .map(|alt_ref| (alt_ref.alt_no(), start[&alt_ref].clone()))
+                .collect();
+
+            for i in 1..r.borrow().alternatives.len() {
+                for j in 0..i {
+                    let set0 = &alt_starts[&i];
+                    let set1 = &alt_starts[&j];
+                    if set0.intersection(set1).count() > 0 {
+                        return Err(format!(
+                                "alts intersect, rule={} i={}, j={} => {:?} <vs> {:?}, intersection={:?}",
+                                r.borrow().name(),
+                                i,
+                                j,
+                                set0,
+                                set1,
+                                set0.intersection(set1),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+
     // =========================================================================
 
     fn clear_cache(&mut self) {
         *self.first_set.borrow_mut() = None;
         *self.follow_set.borrow_mut() = None;
         *self.start_set.borrow_mut() = None;
+    }
+
+    fn put_epsilon_last(&mut self) {
+        for r in &self.rules {
+            let len = r.borrow().alternatives.len();
+            if len > 1 {
+                let mut rule = r.borrow_mut();
+                let mut epsilon_index: Option<usize> = None;
+                for (alt_no, alt) in rule.alternatives.iter().enumerate() {
+                    if alt.len() == 1 && alt[0].is_epsilon() {
+                        epsilon_index = Some(alt_no);
+                        break;
+                    }
+                }
+
+                if let Some(epsilon_index) = epsilon_index {
+                    if epsilon_index != len - 1 {
+                        rule.alternatives.swap(epsilon_index, len - 1);
+                    }
+                }
+            }
+        }
     }
 
     // =========================================================================
@@ -327,6 +491,10 @@ impl Rules {
             }
         }
 
+        if any_change {
+            self.put_epsilon_last();
+        }
+
         if let Err(err) = self.validate() {
             panic!(
                 "rules are not valid after indirect recursion elimination: {}",
@@ -350,115 +518,6 @@ impl Rules {
             panic!("rules are not valid: {}", err);
         }
     }
-
-
-    // =========================================================================
-
-    pub fn validate(&self) -> Result<(), String> {
-        for r in &self.rules {
-            if let Err(err) = r.borrow().validate() {
-                return Err(format!(
-                    "invalid rule, rule_name={} error={}, rule={}",
-                    r.borrow().name(),
-                    err,
-                    r.borrow(),
-                ));
-            }
-        }
-
-        // Duplicate rule.
-        let mut seen = HashSet::new();
-        for r in &self.rules {
-            if !seen.insert(r.borrow().name().to_string()) {
-                return Err(format!("duplicate rule: {}", r.borrow().name()));
-            }
-        }
-
-        // Duplicate recursion elimination number.
-        let numbers = get_sorted_recursion_elimination_numbers(self);
-        for i in 0..numbers.len() - 1 {
-            if numbers[i] == numbers[i + 1] {
-                return Err(format!(
-                    "duplicate recursion elimination rule: {}",
-                    numbers[i]
-                ));
-            }
-        }
-
-        fn find_missing_rule(
-            rules: &Rules,
-            r: &Rc<RefCell<Rule>>,
-            seen: &mut HashSet<String>,
-        ) -> Result<(), String> {
-            if !seen.insert(r.borrow().name().to_string()) {
-                return Ok(());
-            }
-
-            for alt in &r.borrow().alternatives {
-                for part in alt {
-                    if part.is_rule() {
-                        if !rules.has_rule(part.get_rule().borrow().name()) {
-                            return Err(format!(
-                                "missing rule: {}",
-                                part.get_rule().borrow().name()
-                            ));
-                        }
-                        find_missing_rule(rules, &part.get_rule(), seen)?;
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        // A missing rule referenced in another rule.
-        let mut seen = HashSet::new();
-        for r in &self.rules {
-            find_missing_rule(self, r, &mut seen)?
-        }
-
-        for r in &self.rules {
-            if r.borrow().alternatives.is_empty() {
-                return Err(format!(
-                    "rule has has no alternative: {}",
-                    r.borrow().name()
-                ));
-            }
-            for alt in &r.borrow().alternatives {
-                if alt.is_empty() {
-                    return Err(format!("rule has empty alternative: {}", r.borrow().name()));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn get_error(&self) -> Option<String> {
-        let invalid = self.rules.iter().find(|it| it.borrow().validate().is_err());
-        if invalid.is_some() {
-            return Some(format!(
-                "invalid rule: {}",
-                invalid.unwrap().borrow().name()
-            ));
-        }
-
-        let mut seen = HashSet::new();
-        for i in &self.rules {
-            if seen.contains(i.borrow().name()) {
-                return Some(format!("duplicate rule: {}", i.borrow().name()));
-            }
-            seen.insert(i.borrow().name().to_string());
-        }
-        None
-    }
-
-    pub fn has_rule(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.rules.iter().any(|it| it.borrow().name() == name)
-    }
-
 
     // =========================================================================
 
@@ -630,29 +689,26 @@ impl Rules {
         start
     }
 
-
     // =========================================================================
-
-    fn cmp_prefix(
-        alt0: &Vec<RulePart>,
-        alt1: &Vec<RulePart>,
-        len: usize,
-    ) -> bool {
-        if alt0.len() < len || alt1.len() < len {
-            return false;
-        }
-
-        for i in 0..len {
-            if alt0[i].name() != alt1[i].name() {
-                return false;
-            }
-        }
-
-        true
-    }
 
     // Why this implementation? because it's late and I'm tired.
     pub fn eliminate_left_common_prefix(&mut self) -> bool {
+        fn cmp_prefix(
+            alt0: &Vec<RulePart>,
+            alt1: &Vec<RulePart>,
+            len: usize,
+        ) -> bool {
+            if alt0.len() < len || alt1.len() < len {
+                return false;
+            }
+            for i in 0..len {
+                if alt0[i].name() != alt1[i].name() {
+                    return false;
+                }
+            }
+            true
+        }
+
         self.clear_cache();
 
         let mut new_rule_to_add: Option<Rc<RefCell<Rule>>> = None;
@@ -675,7 +731,7 @@ impl Rules {
                             unreachable!("comparing same rule to itself!");
                         }
 
-                        if Self::cmp_prefix(alt0, alt1, len) {
+                        if cmp_prefix(alt0, alt1, len) {
                             prefix_len = Some(len);
                             alt_index = Some(i);
 
@@ -722,7 +778,7 @@ impl Rules {
                         for rest_index in (alt_index.unwrap() + 1)..rule.borrow().alternatives.len()
                         {
                             let alt = &rule.borrow().alternatives[rest_index];
-                            if Self::cmp_prefix(&common_prefix, &alt, len) {
+                            if cmp_prefix(&common_prefix, &alt, len) {
                                 index = Some(rest_index);
                                 break;
                             }
@@ -789,48 +845,13 @@ impl Rules {
             },
         };
 
+        if any_change {
+            self.put_epsilon_last();
+        }
+
         self.clear_cache();
         any_change
     }
-
-    pub fn is_backtrack_free(&self) -> Result<(), String> {
-        let start = self.start_set();
-
-        for r in &self.rules {
-            if r.borrow().alternatives.len() < 2 {
-                continue;
-            }
-
-            let alt_starts: HashMap<_, _> = (0..r.borrow().alternatives.len())
-                .map(|alt_no| AltRef::new(alt_no, r))
-                .map(|alt_ref| (alt_ref.alt_no(), start[&alt_ref].clone()))
-                .collect();
-
-            for i in 1..r.borrow().alternatives.len() {
-                for j in 0..i {
-                    let set0 = &alt_starts[&i];
-                    let set1 = &alt_starts[&j];
-                    if set0.intersection(set1).count() > 0 {
-                        println!(
-                            "{}",
-                            format!(
-                                "alts intersect, rule={} i={}, j={} => {:?} <vs> {:?}, intersection={:?}",
-                                r.borrow().name(),
-                                i,
-                                j,
-                                set0,
-                                set1,
-                                set0.intersection(set1),
-                            )
-                        );
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
 
     // =========================================================================
 
