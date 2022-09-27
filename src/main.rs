@@ -62,7 +62,7 @@ fn correct_program(rules: &Rules) -> Result<(), String> {
             println!("parsed successfully:\n{}", display);
         },
         Err(parse_error) => {
-            panic!("unexpected error: {}", parse_error)
+            return Err(format!("unexpected error: {}", parse_error));
         },
     }
 
@@ -152,7 +152,7 @@ fn main() -> Result<(), String> {
 
     rules.is_backtrack_free()?;
 
-    println!("{}", rules);
+    println!("backtrack-free: {}", rules);
 
     println!("\n\n");
 

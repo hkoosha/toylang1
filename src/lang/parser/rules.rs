@@ -474,21 +474,23 @@ impl Rules {
         let mut any_change = false;
 
         if let Some((i, i_alt_index, s)) = self.find_i_and_s() {
-            let rule_i = self.find_rule_by_recursion_num(i);
+            let rule_s: Rc<RefCell<Rule>> = self.find_rule_by_recursion_num(s);
+            let rule_i: Rc<RefCell<Rule>> = self.find_rule_by_recursion_num(i);
+
             let mut rule_i_alt = rule_i.borrow_mut().alternatives.remove(i_alt_index);
 
-            let recursive_call_to_rule_s = rule_i_alt.remove(0);
-            let rule_s = self.find_rule_by_recursion_num(s);
-            assert_eq!(recursive_call_to_rule_s.name(), rule_s.borrow().name());
+            assert_eq!(rule_i_alt.remove(0).name(), rule_s.borrow().name());
 
             for s_alt in &rule_s.borrow().alternatives {
-                let mut fix = s_alt.clone();
+                let mut fix: Vec<RulePart> = s_alt.clone();
                 fix.append(&mut rule_i_alt.clone());
-                self.rules[i].borrow_mut().alternatives.push(fix);
 
-                any_change = true;
-                break;
+                if fix.len() != 1 || !fix[0].is_epsilon() || !rule_i.borrow().has_epsilon() {
+                    rule_i.borrow_mut().alternatives.push(fix);
+                }
             }
+
+            any_change = true;
         }
 
         if any_change {
@@ -778,7 +780,7 @@ impl Rules {
                         for rest_index in (alt_index.unwrap() + 1)..rule.borrow().alternatives.len()
                         {
                             let alt = &rule.borrow().alternatives[rest_index];
-                            if cmp_prefix(&common_prefix, &alt, len) {
+                            if cmp_prefix(&common_prefix, alt, len) {
                                 index = Some(rest_index);
                                 break;
                             }
@@ -790,8 +792,7 @@ impl Rules {
                                 let suffix = {
                                     let mut work_alt = rule.borrow_mut().alternatives.remove(index);
                                     let (_, suffix) = work_alt.split_at_mut(len);
-                                    let suffix = suffix.to_vec();
-                                    suffix
+                                    suffix.to_vec()
                                 };
 
                                 new_rule.borrow_mut().add_alt();

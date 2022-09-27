@@ -107,7 +107,6 @@ fn backtrack<'a>(
     tokens: &mut Vec<Token<'a>>,
     stack: &mut Vec<Rc<RefCell<Node>>>,
 ) -> Result<Option<Rc<RefCell<Node<'a>>>>, String> {
-    //
     trace!(
         "NO MATCH backtracking:\n{}\n>>>>>>>>",
         display_of(focus.as_ref().unwrap())

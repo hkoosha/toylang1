@@ -160,10 +160,7 @@ impl Display for RulePart {
         &self,
         f: &mut Formatter<'_>,
     ) -> std::fmt::Result {
-        match self {
-            RulePart::Rule(rule) => write!(f, "RulePart::Rule[{}]", rule.borrow()),
-            RulePart::Token(token_kind) => write!(f, "RulePart::Token[{}]", token_kind),
-        }
+        write!(f, "RulePart[{}]", self.name())
     }
 }
 
@@ -360,6 +357,13 @@ impl Rule {
         }
 
         Ok(())
+    }
+
+
+    pub fn has_epsilon(&self) -> bool {
+        self.alternatives
+            .iter()
+            .any(|it| it.len() == 1 && it[0].is_epsilon())
     }
 }
 
