@@ -295,10 +295,7 @@ impl Rule {
             .iter()
             .map(|it| {
                 it.iter()
-                    .map(|it| match it {
-                        RulePart::Rule(rule) => rule.borrow().name.to_string(),
-                        RulePart::Token(tk) => tk.name().to_string(),
-                    })
+                    .map(|it| it.name())
                     .collect::<Vec<String>>()
                     .join("-")
             })
@@ -311,20 +308,15 @@ impl Rule {
                 .iter()
                 .map(|it| {
                     it.iter()
-                        .map(|it| match it {
-                            RulePart::Rule(rule) => rule.borrow().name.to_string(),
-                            RulePart::Token(tk) => tk.name().to_string(),
-                        })
+                        .map(|it| it.name())
                         .collect::<Vec<String>>()
                         .join("-")
                 })
-                .filter(|it| !set.contains(it))
                 .collect::<Vec<_>>();
-            let thing: Vec<String> = set.iter().cloned().collect();
             return Err(format!(
-                "duplicates: {} - {}",
+                "duplicates: <{}> vs <{}>",
                 list.join(", "),
-                thing.join(", ")
+                set.iter().cloned().collect::<Vec<_>>().join(", ")
             ));
         }
 

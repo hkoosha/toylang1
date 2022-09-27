@@ -302,7 +302,7 @@ impl Rules {
             .unwrap_or_else(|| panic!("no rule with recursion num: {}", recursion_num))
     }
 
-    fn eliminate_indirect_left_recursions0(&mut self) -> bool {
+    fn eliminate_indirect_left_recursions(&mut self) -> bool {
         self.clear_cache();
 
         self.eliminate_direct_left_recursions();
@@ -321,12 +321,17 @@ impl Rules {
                 let mut fix = s_alt.clone();
                 fix.append(&mut rule_i_alt.clone());
                 self.rules[i].borrow_mut().alternatives.push(fix);
+
                 any_change = true;
+                break;
             }
         }
 
         if let Err(err) = self.validate() {
-            panic!("rules are not valid: {}", err);
+            panic!(
+                "rules are not valid after indirect recursion elimination: {}",
+                err
+            );
         }
 
         any_change
@@ -339,7 +344,7 @@ impl Rules {
             panic!("rules are not valid: {}", err);
         }
 
-        while self.eliminate_indirect_left_recursions0() {}
+        while self.eliminate_indirect_left_recursions() {}
 
         if let Err(err) = self.validate() {
             panic!("rules are not valid: {}", err);
@@ -350,13 +355,15 @@ impl Rules {
     // =========================================================================
 
     pub fn validate(&self) -> Result<(), String> {
-        if let Some(erroneous_rule) = self.rules.iter().find(|it| it.borrow().validate().is_err()) {
-            let err_str = erroneous_rule.borrow().validate().err().unwrap();
-            return Err(format!(
-                "invalid rule, rule_name={} error={}",
-                erroneous_rule.borrow().name(),
-                err_str
-            ));
+        for r in &self.rules {
+            if let Err(err) = r.borrow().validate() {
+                return Err(format!(
+                    "invalid rule, rule_name={} error={}, rule={}",
+                    r.borrow().name(),
+                    err,
+                    r.borrow(),
+                ));
+            }
         }
 
         // Duplicate rule.
@@ -672,11 +679,6 @@ impl Rules {
                             prefix_len = Some(len);
                             alt_index = Some(i);
 
-                            println!(
-                                "PREFIX_LEN={}, ALT_INDEX={}\nalt0={:?}\nalt1={:?}",
-                                len, i, alt0, alt1
-                            );
-
                             break 'outer;
                         }
                     }
@@ -686,8 +688,6 @@ impl Rules {
             match prefix_len {
                 None => {},
                 Some(len) => {
-                    println!("PREFIX LEN: {}", len);
-
                     let mut new_rule = {
                         let new_name = self.find_new_indexed_name(rule.borrow().name());
                         let recursion_num = self.max_recursion_elimination_num() + 1;
@@ -755,15 +755,34 @@ impl Rules {
         let any_change = match new_rule_to_add {
             None => false,
             Some(new_rule) => {
-                for alt in &mut new_rule.borrow_mut().alternatives {
+                let mut empty_indexes = vec![];
+                let mut has_epsilon = false;
+                for (alt_no, alt) in new_rule.borrow().alternatives.iter().enumerate() {
                     if alt.is_empty() {
-                        alt.push(RulePart::Token(TokenKind::Epsilon));
+                        empty_indexes.push(alt_no);
                     }
+                    else if alt.len() == 1 && alt[0].is_epsilon() {
+                        has_epsilon = true;
+                    }
+                }
+                if empty_indexes.len() > 1 {
+                    panic!(
+                        "multiple empty slots found in: {}",
+                        new_rule.borrow().name()
+                    )
+                }
+                else if has_epsilon && !empty_indexes.is_empty() {
+                    new_rule
+                        .borrow_mut()
+                        .alternatives
+                        .remove(empty_indexes.pop().unwrap());
+                }
+                else if !empty_indexes.is_empty() {
+                    new_rule.borrow_mut().alternatives[empty_indexes.pop().unwrap()]
+                        .push(TokenKind::Epsilon.into());
                 }
 
                 self.rules.push(new_rule);
-
-                println!("NEW WORLD: {}", self);
 
                 self.eliminate_left_common_prefix();
                 true
@@ -787,23 +806,23 @@ impl Rules {
                 .map(|alt_ref| (alt_ref.alt_no(), start[&alt_ref].clone()))
                 .collect();
 
-            println!("SHIT IS: {:?}", r.borrow().alternatives);
-
             for i in 1..r.borrow().alternatives.len() {
                 for j in 0..i {
                     let set0 = &alt_starts[&i];
                     let set1 = &alt_starts[&j];
                     if set0.intersection(set1).count() > 0 {
-                        println!("BAD WORLD: {}", self);
-                        return Err(format!(
-                            "alts intersect, rule={} i={}, j={} => {:?} <> {:?} = {:?}",
-                            r.borrow().name(),
-                            i,
-                            j,
-                            set0,
-                            set1,
-                            set0.intersection(set1),
-                        ));
+                        println!(
+                            "{}",
+                            format!(
+                                "alts intersect, rule={} i={}, j={} => {:?} <vs> {:?}, intersection={:?}",
+                                r.borrow().name(),
+                                i,
+                                j,
+                                set0,
+                                set1,
+                                set0.intersection(set1),
+                            )
+                        );
                     }
                 }
             }
@@ -822,7 +841,7 @@ impl Rules {
         for _ in 0..max_loop {
             self.eliminate_left_recursions();
             match self.eliminate_left_common_prefix() {
-                true => {},
+                true => self.clear_cache(),
                 false => return Ok(()),
             }
         }

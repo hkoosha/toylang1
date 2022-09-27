@@ -150,12 +150,11 @@ fn main() -> Result<(), String> {
 
     println!("\n\n===================================================\n\n");
 
-    rules.eliminate_left_common_prefix();
-    println!("RULES: {}\n", rules);
-
     rules.make_ready_for_recursive_decent(128)?;
 
     rules.is_backtrack_free()?;
+
+    println!("{}", rules);
 
     println!("\n\n");
 
