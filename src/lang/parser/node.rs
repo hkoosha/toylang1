@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp::max;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -8,18 +9,18 @@ use crate::lang::lexer::token::Token;
 use crate::lang::parser::rule::RulePart;
 
 pub struct Node<'a> {
-    pub rule_part: RulePart,
-    pub alt_no: Option<usize>,
+    rule_part: RulePart,
+    alt_no: Option<usize>,
 
-    pub token: Option<Token<'a>>,
+    token: Option<Token<'a>>,
 
-    pub parent: Option<Rc<RefCell<Node<'a>>>>,
-    pub children: Vec<Rc<RefCell<Node<'a>>>>,
+    parent: Option<Rc<RefCell<Node<'a>>>>,
+    children: Vec<Rc<RefCell<Node<'a>>>>,
 
     num: usize,
 }
 
-impl Node<'_> {
+impl<'a> Node<'a> {
     pub fn new(
         rule_part: RulePart,
         num: usize,
@@ -29,6 +30,27 @@ impl Node<'_> {
             alt_no: None,
             token: None,
             parent: None,
+            children: vec![],
+            num,
+        };
+
+        if node.rule_part.is_rule() && node.has_next_alt() {
+            node.next_alt();
+        }
+
+        node
+    }
+
+    pub fn new_with_parent(
+        rule_part: RulePart,
+        num: usize,
+        parent: &Rc<RefCell<Node<'a>>>,
+    ) -> Self {
+        let mut node = Self {
+            rule_part,
+            alt_no: None,
+            token: None,
+            parent: Some(Rc::clone(parent)),
             children: vec![],
             num,
         };
@@ -115,6 +137,70 @@ impl Node<'_> {
     pub fn num(&self) -> usize {
         self.num
     }
+
+    pub fn next_num(&self) -> usize {
+        if let Some(parent) = self.parent.as_ref() {
+            return parent.borrow().next_num();
+        }
+
+        self.max_num() + 1
+    }
+
+    fn max_num(&self) -> usize {
+        let mut next_num = self.num();
+
+        for r in &self.children {
+            next_num = max(next_num, r.borrow().max_num())
+        }
+
+        next_num
+    }
+
+
+    pub fn rule_part(&self) -> &RulePart {
+        &self.rule_part
+    }
+
+    pub fn parent(&self) -> &Option<Rc<RefCell<Node<'a>>>> {
+        &self.parent
+    }
+
+
+    pub fn token(&self) -> &Option<Token<'a>> {
+        &self.token
+    }
+
+    pub fn drain_token(&mut self) -> Token<'a> {
+        let mut drain: Option<Token<'a>> = None;
+        std::mem::swap(&mut drain, &mut self.token);
+        drain.unwrap()
+    }
+
+    pub fn set_token(
+        &mut self,
+        t: Token<'a>,
+    ) {
+        self.token = Some(t);
+    }
+
+
+    pub fn children(&self) -> &Vec<Rc<RefCell<Node<'a>>>> {
+        &self.children
+    }
+
+    pub fn set_children(
+        &mut self,
+        children: Vec<Rc<RefCell<Node<'a>>>>,
+    ) {
+        self.children = children
+    }
+
+    pub fn append_child(
+        &mut self,
+        child: &Rc<RefCell<Node<'a>>>,
+    ) {
+        self.children.push(Rc::clone(child));
+    }
 }
 
 impl Drop for Node<'_> {
@@ -167,6 +253,8 @@ fn display_of0(
     }
 }
 
+
+pub type ParseResult<'a> = Result<Rc<RefCell<Node<'a>>>, ParseError<'a>>;
 
 pub struct ParseError<'a> {
     partial_tree: Rc<RefCell<Node<'a>>>,

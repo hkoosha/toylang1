@@ -8,6 +8,7 @@ use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::node::display_of;
 use crate::lang::parser::node::Node;
 use crate::lang::parser::node::ParseError;
+use crate::lang::parser::node::ParseResult;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::parser::rules::Rules;
 
@@ -16,7 +17,7 @@ fn print_stack(stack: &[Rc<RefCell<Node>>]) {
         "<<<<<<<<<<<<<<<<<<<<<<<<<<<< stack: {}",
         stack
             .iter()
-            .map(|it| it.borrow().rule_part.name() + "-" + &it.borrow().num().to_string())
+            .map(|it| it.borrow().rule_part().name() + "-" + &it.borrow().num().to_string())
             .collect::<Vec<_>>()
             .join(", ")
     );
@@ -24,7 +25,7 @@ fn print_stack(stack: &[Rc<RefCell<Node>>]) {
 
 fn is_non_terminal_with_alt(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
     node.is_some()
-        && node.as_ref().unwrap().borrow().rule_part.is_rule()
+        && node.as_ref().unwrap().borrow().rule_part().is_rule()
         && node.as_ref().unwrap().borrow().has_alt()
 }
 
@@ -35,7 +36,7 @@ fn is_token_match(
     trace!(
         "TRYING TO MATCH: {} <==> {}",
         node.as_ref()
-            .map(|it| it.borrow().rule_part.name())
+            .map(|it| it.borrow().rule_part().name())
             .unwrap_or_else(|| "?".to_string()),
         word.map(|it| it.text).unwrap_or("?"),
     );
@@ -43,9 +44,9 @@ fn is_token_match(
     match node {
         Some(node) => {
             let node = node.borrow();
-            if node.rule_part.is_token() {
+            if node.rule_part().is_token() {
                 word.is_some()
-                    && *node.rule_part.get_token_kind() == word.as_ref().unwrap().token_kind
+                    && *node.rule_part().get_token_kind() == word.as_ref().unwrap().token_kind
             }
             else {
                 false
@@ -59,8 +60,8 @@ fn is_epsilon(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
     match node {
         None => false,
         Some(node) => {
-            node.borrow().rule_part.is_token()
-                && *node.borrow().rule_part.get_token_kind() == TokenKind::Epsilon
+            node.borrow().rule_part().is_token()
+                && *node.borrow().rule_part().get_token_kind() == TokenKind::Epsilon
         },
     }
 }
@@ -77,25 +78,22 @@ fn backtrack_push_back<'a>(
     tokens: &mut Vec<Token<'a>>,
     stack: &mut Vec<Rc<RefCell<Node>>>,
 ) {
-    if !focus.borrow().children.is_empty() {
-        trace!("KILLING CHILDREN OF: {}", focus.borrow().rule_part.name());
-        for child in focus.borrow().children.iter().rev() {
+    if !focus.borrow().children().is_empty() {
+        trace!("KILLING CHILDREN OF: {}", focus.borrow().rule_part().name());
+        for child in focus.borrow().children().iter().rev() {
             backtrack_push_back(Rc::clone(child), tokens, stack);
         }
         print_stack(stack);
     }
-    else if focus.borrow().token.is_some() {
-        let mut push_back: Option<Token<'a>> = None;
-        std::mem::swap(&mut push_back, &mut focus.borrow_mut().token);
+    else if focus.borrow().token().is_some() {
+        let push_back = focus.borrow_mut().drain_token();
         trace!(
             "///////////////////////> putting back ::: {} ({})",
-            push_back.map_or("None", |it| it.text),
-            focus.borrow().rule_part.name()
+            push_back.text,
+            focus.borrow().rule_part().name()
         );
 
-        if let Some(push_back) = push_back {
-            tokens.push(push_back);
-        }
+        tokens.push(push_back);
     }
 
     let num = focus.borrow().num();
@@ -114,36 +112,36 @@ fn backtrack<'a>(
     print_stack(stack);
 
     let focus = focus.unwrap();
-    if !focus.borrow().rule_part.is_token()
+    if !focus.borrow().rule_part().is_token()
         && !focus.borrow().has_next_alt()
-        && focus.borrow().parent.is_none()
+        && focus.borrow().parent().is_none()
     {
         trace!("STRAIGHT TO HELL");
         Err(format!(
             "no more alt on: {}",
-            focus.borrow().rule_part.name()
+            focus.borrow().rule_part().name()
         ))
     }
     else {
         trace!("LET'S SEE");
         backtrack_push_back(Rc::clone(&focus), tokens, stack);
 
-        if !focus.borrow().rule_part.is_token() && focus.borrow().has_next_alt() {
+        if !focus.borrow().rule_part().is_token() && focus.borrow().has_next_alt() {
             trace!("going next");
             focus.borrow_mut().next_alt();
             Ok(Some(focus))
         }
-        else if focus.borrow().parent.is_some() {
+        else if focus.borrow().parent().is_some() {
             trace!(
                 "going parent of: {} aka {}",
-                focus.borrow().rule_part.name(),
+                focus.borrow().rule_part().name(),
                 focus
                     .borrow()
-                    .parent
+                    .parent()
                     .as_ref()
-                    .map_or("?".to_string(), |it| it.borrow().rule_part.name()),
+                    .map_or("?".to_string(), |it| it.borrow().rule_part().name()),
             );
-            let ff = Some(Rc::clone(focus.borrow_mut().parent.as_ref().unwrap()));
+            let ff = Some(Rc::clone(focus.borrow_mut().parent().as_ref().unwrap()));
             backtrack(ff, tokens, stack)
         }
         else {
@@ -152,10 +150,10 @@ fn backtrack<'a>(
     }
 }
 
-pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
+pub fn parse_with_backtracking<'a, 'b, T: DoubleEndedIterator<Item = Token<'a>>>(
     rules: &Rules,
     tokens: T,
-) -> Result<Rc<RefCell<Node<'a>>>, ParseError<'a>> {
+) -> ParseResult<'a> {
     trace!("matching against: {}", rules);
 
     // We're backtracking parser, one more inefficiency is that we need to collect into vector so
@@ -167,14 +165,14 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
     let mut next_num = 0;
 
     let root = {
-        let rule_part: RulePart = rules.rules.first().unwrap().into();
-        let root: Node<'a> = Node::new(rule_part, next_num);
+        let rule_part: RulePart = rules.rules().first().unwrap().into();
+        let root: Node<'_> = Node::new(rule_part, next_num);
         next_num += 1;
-        let root: Rc<RefCell<Node<'a>>> = root.into();
+        let root: Rc<RefCell<Node<'_>>> = root.into();
         root
     };
 
-    if let Err(err) = &rules.validate() {
+    if let Err(err) = rules.validate() {
         return Err(ParseError::new(&root, format!("invalid rules: {}", err)));
     }
 
@@ -189,22 +187,22 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
                 .as_ref()
                 .unwrap()
                 .borrow()
-                .rule_part
+                .rule_part()
                 .get_rule()
                 .borrow()
                 .alternatives[alt_no]
             {
                 let rule_part = child.clone();
-                let mut new_node: Node<'a> = Node::new(rule_part, next_num);
+                let new_node: Node<'a> =
+                    Node::new_with_parent(rule_part, next_num, focus.as_ref().unwrap());
                 next_num += 1;
-                new_node.parent = Some(Rc::clone(focus.as_ref().unwrap()));
                 let new_node: Rc<RefCell<Node<'a>>> = new_node.into();
                 children.push(new_node);
             }
             for child in children.iter().rev() {
                 stack.push(Rc::clone(child));
             }
-            focus.as_mut().unwrap().borrow_mut().children = children;
+            focus.as_mut().unwrap().borrow_mut().set_children(children);
             focus = stack.pop();
             trace!("===========================================================");
             trace!("AFTER\n{}", display_of(&root));
@@ -217,7 +215,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
             if focus.is_some() {
                 trace!(
                     "focus is now: {} vs: {:?}",
-                    focus.as_ref().unwrap().borrow().rule_part.name(),
+                    focus.as_ref().unwrap().borrow().rule_part().name(),
                     word,
                 );
             }
@@ -228,10 +226,14 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
         else if is_token_match(&focus, &word) {
             trace!(
                 "happy match: {} => {}",
-                focus.as_ref().unwrap().borrow().rule_part.name(),
+                focus.as_ref().unwrap().borrow().rule_part().name(),
                 word.as_ref().unwrap().text,
             );
-            focus.as_mut().unwrap().borrow_mut().token = word;
+            focus
+                .as_mut()
+                .unwrap()
+                .borrow_mut()
+                .set_token(word.unwrap());
             word = tokens.pop();
             focus = stack.pop();
             match &word {
@@ -241,7 +243,7 @@ pub fn parse<'a, T: DoubleEndedIterator<Item = Token<'a>>>(
             if focus.is_some() {
                 trace!(
                     "focus is now: {} vs: {}",
-                    focus.as_ref().unwrap().borrow().rule_part.name(),
+                    focus.as_ref().unwrap().borrow().rule_part().name(),
                     word.map_or("None", |it| it.text),
                 );
             }

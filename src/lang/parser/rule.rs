@@ -228,6 +228,7 @@ pub fn display_of_vec_rule_part(
 }
 
 
+#[derive(Clone)]
 pub struct Rule {
     name: String,
     recursion_elimination_num: usize,

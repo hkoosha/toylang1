@@ -13,7 +13,7 @@ use crate::lang::parser::rule::RulePart;
 use crate::lang::util::extend;
 
 pub struct Rules {
-    pub rules: Vec<Rc<RefCell<Rule>>>,
+    rules: Vec<Rc<RefCell<Rule>>>,
     first_set: RefCell<Option<HashMap<String, HashSet<TokenKind>>>>,
     follow_set: RefCell<Option<HashMap<String, HashSet<TokenKind>>>>,
     start_set: RefCell<Option<HashMap<AltRef, HashSet<TokenKind>>>>,
@@ -125,6 +125,24 @@ impl Rules {
         }
 
         Ok(Self::from_rules(rules))
+    }
+
+
+    pub fn get_rule_by_name(
+        &self,
+        name: &str,
+    ) -> Rc<RefCell<Rule>> {
+        for r in &self.rules {
+            if r.borrow().name() == name {
+                return Rc::clone(r);
+            }
+        }
+
+        panic!("no rule with this name: {}", name)
+    }
+
+    pub fn rules(&self) -> &Vec<Rc<RefCell<Rule>>> {
+        &self.rules
     }
 
 
@@ -267,7 +285,6 @@ impl Rules {
 
         Ok(())
     }
-
 
     // =========================================================================
 
@@ -887,6 +904,17 @@ impl Eq for Rules {
 impl Default for Rules {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Clone for Rules {
+    fn clone(&self) -> Self {
+        Self {
+            rules: self.rules.clone(),
+            first_set: RefCell::new(None),
+            follow_set: RefCell::new(None),
+            start_set: RefCell::new(None),
+        }
     }
 }
 

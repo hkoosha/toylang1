@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use toylang1::lang::lexer::token::Token;
 use toylang1::lang::lexer::token::TokenKind;
 use toylang1::lang::lexer::v0::Lexer;
 use toylang1::lang::parser::node::display_of;
 use toylang1::lang::parser::rules::Rules;
-use toylang1::lang::parser_impl::backtracking_parser::parse;
+use toylang1::lang::parser_impl::backtracking_parser::parse_with_backtracking;
+use toylang1::lang::parser_impl::recursive_descent_parser::recursive_descent_parse;
 
 const SAMPLE_CORRECT_PROGRAM: &str = "\
     fn my_thing42(int j) {
@@ -54,7 +56,7 @@ fn correct_program(rules: &Rules) -> Result<(), String> {
     // Parsed successfully above, ok to unwrap.
     let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
 
-    let parsed = parse(rules, tokens.into_iter());
+    let parsed = parse_with_backtracking(rules, tokens.into_iter());
 
     match parsed {
         Ok(parse_tree) => {
@@ -80,7 +82,7 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
     // Parsed successfully above, ok to unwrap.
     let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
 
-    let parsed = parse(rules, tokens.into_iter());
+    let parsed = parse_with_backtracking(rules, tokens.into_iter());
 
     match parsed {
         Ok(parse_tree) => {
@@ -101,13 +103,9 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(clippy::needless_collect)]
-fn main() -> Result<(), String> {
-    let mut rules: Rules = GRAMMAR.try_into()?;
-    rules.eliminate_left_recursions();
-    rules.validate()?;
-
+fn i_am_game(rules: &Rules) -> Result<(), String> {
     println!("\n\n===================================================\n\n");
+
     correct_program(&rules)?;
 
     println!("\n\n===================================================\n\n");
@@ -115,7 +113,11 @@ fn main() -> Result<(), String> {
 
     println!("\n\n===================================================\n\n");
 
-    println!("RULES: {}\n", rules);
+    Ok(())
+}
+
+fn first_follow_start(rules: &Rules) {
+    println!("\n\n===================================================\n\n");
 
     rules
         .first_set()
@@ -145,14 +147,35 @@ fn main() -> Result<(), String> {
         .collect::<BTreeMap<_, _>>()
         .into_iter()
         .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
+}
+
+#[allow(clippy::needless_collect)]
+fn main() -> Result<(), String> {
+    let mut rules: Rules = GRAMMAR.try_into()?;
+    rules.eliminate_left_recursions();
+    rules.validate()?;
+
+    if "haha".parse::<usize>().is_ok() {
+        i_am_game(&rules)?;
+    }
+
+    rules.make_ready_for_recursive_decent(128)?;
+    rules.is_backtrack_free()?;
+    println!("backtrack-free: {}", rules);
+
+    first_follow_start(&rules);
 
     println!("\n\n===================================================\n\n");
 
-    rules.make_ready_for_recursive_decent(128)?;
-
-    rules.is_backtrack_free()?;
-
-    println!("backtrack-free: {}", rules);
+    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM.into();
+    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
+    match recursive_descent_parse(&rules, iter.into_iter()) {
+        Ok(tree) => println!("tree:\n{}", display_of(&tree)),
+        Err(err) => {
+            println!("partial tree:\n{}", display_of(err.partial_tree()));
+            Err(err.error().to_string())?
+        },
+    }
 
     println!("\n\n");
 
