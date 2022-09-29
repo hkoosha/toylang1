@@ -107,12 +107,6 @@ fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
     println!("correct");
 
     let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    for token in lexer {
-        token?;
-    }
-
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    // Parsed successfully above, ok to unwrap.
     let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
 
     let parsed = parse_with_backtracking(rules, tokens.into_iter());
@@ -133,11 +127,6 @@ fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
 #[allow(clippy::needless_collect)]
 fn backtracking_incorrect_program(rules: &Rules) -> Result<(), String> {
     println!("incorrect");
-
-    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
-    for token in lexer {
-        token?;
-    }
 
     let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
     // Parsed successfully above, ok to unwrap.
@@ -179,7 +168,7 @@ fn backtracking(rules: &Rules) -> Result<(), String> {
 #[allow(clippy::needless_collect)]
 fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
+    let iter: Vec<Token<'_>> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
 
     match recursive_descent_parse(rules, iter.into_iter()) {
         Ok(tree) => {

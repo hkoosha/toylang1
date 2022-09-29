@@ -47,6 +47,16 @@ impl<'a> From<&'a str> for TextCharIter<'a> {
 
 // =============================================================================
 
+#[derive(Debug)]
+pub struct LexerError {
+    pub position: usize,
+    pub line: usize,
+    pub error: String,
+}
+
+pub type LexerResult<'a> = Result<Token<'a>, LexerError>;
+
+
 pub struct Lexer<'a> {
     is_error: bool,
     buffer_start: usize,
@@ -60,10 +70,6 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(text: &'a str) -> Self {
-        if text.is_empty() {
-            panic!("empty text not supported");
-        }
-
         Self {
             is_error: false,
             buffer_start: 0,
@@ -362,7 +368,7 @@ impl<'a> From<&'a str> for Lexer<'a> {
 }
 
 impl<'a> IntoIterator for Lexer<'a> {
-    type Item = Result<Token<'a>, String>;
+    type Item = LexerResult<'a>;
     type IntoIter = LexerIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -379,7 +385,7 @@ pub struct LexerIter<'a> {
 }
 
 impl<'a> Iterator for LexerIter<'a> {
-    type Item = Result<Token<'a>, String>;
+    type Item = LexerResult<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.iter_finished {
@@ -395,7 +401,11 @@ impl<'a> Iterator for LexerIter<'a> {
             },
             Err(err) => {
                 self.iter_finished = true;
-                Some(Err(err))
+                Some(Err(LexerError {
+                    position: self.lexer.buffer_start,
+                    line: self.lexer.current_line,
+                    error: err,
+                }))
             },
         };
     }
@@ -411,8 +421,7 @@ mod tests {
     #[test]
     fn test_id0() {
         let lexer: Lexer = "hello\nwhatever".into();
-        let mut i = 0;
-        for x in lexer.into_iter() {
+        for (i, x) in lexer.into_iter().enumerate() {
             let x = x.unwrap();
             match i {
                 0 => {
@@ -429,15 +438,14 @@ mod tests {
                 },
                 _ => panic!("unexpected loop counter: {}, token: {}", i, x),
             }
-            i += 1;
         }
     }
 
     #[test]
     fn test_fn_and_id() {
         let lexer: Lexer = "fn my_thing42".into();
-        let mut i = 0;
-        for x in lexer.into_iter() {
+
+        for (i, x) in lexer.into_iter().enumerate() {
             let x = x.unwrap();
             match i {
                 0 => {
@@ -454,7 +462,21 @@ mod tests {
                 },
                 _ => panic!("unexpected loop counter: {}, token: {}", i, x),
             }
-            i += 1;
+        }
+    }
+
+    #[test]
+    fn test_empty() {
+        let lexer: Lexer = "".into();
+        for (i, x) in lexer.into_iter().enumerate() {
+            let x = x.unwrap();
+            match i {
+                0 => {
+                    assert_eq!(x.token_kind, TokenKind::Eof);
+                    assert_eq!(x.line, 1);
+                },
+                _ => panic!("unexpected loop counter: {}, token: {}", i, x),
+            }
         }
     }
 }
