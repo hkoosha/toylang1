@@ -183,22 +183,6 @@ impl<'a> Node<'a> {
         self.token = Some(t);
     }
 
-    pub fn consume_token(
-        &mut self,
-        token: &mut Option<Token<'a>>,
-    ) {
-        if self.token.is_some() {
-            panic!(
-                "token already set, this_token: {}, given: {}",
-                self.token.as_ref().unwrap(),
-                token.as_ref().unwrap()
-            )
-        }
-
-        std::mem::swap(&mut self.token, token);
-    }
-
-
     pub fn children(&self) -> &Vec<Rc<RefCell<Node<'a>>>> {
         &self.children
     }

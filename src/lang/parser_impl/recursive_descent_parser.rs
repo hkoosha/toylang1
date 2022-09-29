@@ -27,7 +27,6 @@ struct RecursiveDescentParser<'a, 'b, T: Iterator<Item = Token<'a>>> {
 
     tokens: Peekable<T>,
     focus: Rc<RefCell<Node<'a>>>,
-    current_word: Option<Token<'a>>,
 }
 
 impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
@@ -42,7 +41,6 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             rules,
             tokens: tokens.peekable(),
             focus: root.into(),
-            current_word: None,
             first_set: rules
                 .first_set()
                 .into_iter()
@@ -230,32 +228,33 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         &mut self,
         expecting: TokenKind,
     ) -> ParseResult<'a> {
-        println!("match tk, current {:?}", self.current_word);
+        if !self.has_peek() {
+            return self._err(format!(
+                "unexpected end of input, expecting: {}, got nothing",
+                expecting,
+            ));
+        }
 
-        let current_word = match &self.current_word {
-            None => {
-                return self._err(format!(
-                    "unexpected token kind, expecting: {}, got nothing",
-                    expecting,
-                ));
-            },
-            Some(word) => word,
-        };
+        println!(
+            "match tk, expecting: {}, current: {}",
+            expecting.name(),
+            self.peek().text
+        );
 
-        if current_word.token_kind == expecting {
+        if self.peek().token_kind == expecting {
             let node = self.node_by_token_kind(expecting);
-            node.borrow_mut().consume_token(&mut self.current_word);
+            node.borrow_mut().set_token(self.tokens.next().unwrap());
             self.focus.borrow_mut().append_child(&node);
-            self.current_word = self.tokens.next();
 
-            println!("Token: {}", node.borrow().token().unwrap());
             Ok(Rc::clone(&self.focus))
         }
         else {
-            self._err(format!(
+            let err = format!(
                 "unexpected token kind, expecting: {}, got: {}",
-                expecting, current_word,
-            ))
+                expecting,
+                self.peek(),
+            );
+            self._err(err)
         }
     }
 
@@ -273,11 +272,11 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             Ok(Rc::clone(&self.focus))
         }
         else if self.peek_is_in_rule_first("fn_call") {
-            self.current_word = self.tokens.next();
+            println!("parsing S, peek is in fn_call start");
             self.parse_fn_call()
         }
         else if self.peek_is_in_rule_first("fn_declaration") {
-            self.current_word = self.tokens.next();
+            println!("parsing S, peek is in fn_declaration start");
             self.parse_fn_declaration()
         }
         else {
