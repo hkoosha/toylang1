@@ -70,7 +70,7 @@ fn is_eof(
     node: &Option<Rc<RefCell<Node<'_>>>>,
     word: &Option<Token<'_>>,
 ) -> bool {
-    node.is_none() && word.is_none()
+    node.is_none() && word.is_some() && word.unwrap().token_kind == TokenKind::Eof
 }
 
 fn backtrack_push_back<'a>(

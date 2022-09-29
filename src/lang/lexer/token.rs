@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Ord, PartialOrd)]
 pub enum TokenKind {
     Error,
+    Eof,
     Epsilon,
     Id,
     Fn,
@@ -29,6 +30,7 @@ impl TokenKind {
     pub fn values() -> Vec<Self> {
         [
             Self::Error,
+            Self::Eof,
             Self::Epsilon,
             Self::Id,
             Self::Fn,
@@ -54,6 +56,27 @@ impl TokenKind {
 
     pub fn from_repr(repr: &str) -> Result<Self, String> {
         match repr {
+            "fn" => Ok(Self::Fn),
+            "return" => Ok(Self::Return),
+            "(" => Ok(Self::LeftParen),
+            ")" => Ok(Self::RightParen),
+            "[" => Ok(Self::LeftBracket),
+            "]" => Ok(Self::RightBracket),
+            "{" => Ok(Self::LeftBraces),
+            "}" => Ok(Self::RightBraces),
+            ";" => Ok(Self::Semicolon),
+            "," => Ok(Self::Comma),
+            "=" => Ok(Self::Equal),
+            "/" => Ok(Self::Slash),
+            "*" => Ok(Self::Star),
+            "-" => Ok(Self::Minus),
+            "+" => Ok(Self::Plus),
+            _ => Err(format!("unknown TokenKind representation: {}", repr)),
+        }
+    }
+
+    pub fn from_repr_including_epsilon(repr: &str) -> Result<Self, String> {
+        match repr {
             "" => Ok(Self::Epsilon),
             "fn" => Ok(Self::Fn),
             "return" => Ok(Self::Return),
@@ -78,6 +101,7 @@ impl TokenKind {
     pub fn from_name(repr: &str) -> Result<Self, String> {
         match repr.to_lowercase().as_str() {
             "error" => Ok(Self::Error),
+            "eof" => Ok(Self::Eof),
             "epsilon" => Ok(Self::Epsilon),
             "id" => Ok(Self::Id),
             "fn" => Ok(Self::Fn),
@@ -104,6 +128,7 @@ impl TokenKind {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Error => "error",
+            Self::Eof => "eof",
             Self::Epsilon => "epsilon",
             Self::Id => "id",
             Self::Fn => "fn",
@@ -129,6 +154,7 @@ impl TokenKind {
     pub fn upper_name(&self) -> &'static str {
         match self {
             Self::Error => "ERROR",
+            Self::Eof => "EOF",
             Self::Epsilon => "EPSILON",
             Self::Id => "ID",
             Self::Fn => "FN",
@@ -185,6 +211,10 @@ impl TokenKind {
 
     pub fn is_epsilon(&self) -> bool {
         *self == Self::Epsilon
+    }
+
+    pub fn is_eof(&self) -> bool {
+        *self == Self::Eof
     }
 }
 

@@ -55,6 +55,7 @@ pub struct Lexer<'a> {
     in_escape: bool,
     token_kind: TokenKind,
     iter: TextCharIter<'a>,
+    produced_eof: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -71,6 +72,7 @@ impl<'a> Lexer<'a> {
             in_escape: false,
             token_kind: TokenKind::Error,
             iter: text.into(),
+            produced_eof: false,
         }
     }
 
@@ -330,8 +332,23 @@ impl<'a> Lexer<'a> {
                     continue;
                 },
                 None => {
-                    trace!("fin");
-                    return Ok(None);
+                    return match self.produced_eof {
+                        true => {
+                            trace!("fin");
+                            Ok(None)
+                        },
+                        false => {
+                            trace!("eof");
+                            self.produced_eof = true;
+                            Ok(Some(Token {
+                                start_pos: self.buffer_start,
+                                end_pos: self.buffer_end,
+                                line: self.current_line,
+                                text: "",
+                                token_kind: TokenKind::Eof,
+                            }))
+                        },
+                    };
                 },
             }
         }
@@ -406,7 +423,11 @@ mod tests {
                     assert_eq!(x.token_kind, TokenKind::Id);
                     assert_eq!(x.line, 2);
                 },
-                _ => panic!(),
+                2 => {
+                    assert_eq!(x.token_kind, TokenKind::Eof);
+                    assert_eq!(x.line, 2);
+                },
+                _ => panic!("unexpected loop counter: {}, token: {}", i, x),
             }
             i += 1;
         }
@@ -427,7 +448,11 @@ mod tests {
                     assert_eq!(x.token_kind, TokenKind::Id);
                     assert_eq!(x.line, 1);
                 },
-                _ => panic!(),
+                2 => {
+                    assert_eq!(x.token_kind, TokenKind::Eof);
+                    assert_eq!(x.line, 1);
+                },
+                _ => panic!("unexpected loop counter: {}, token: {}", i, x),
             }
             i += 1;
         }
