@@ -213,7 +213,7 @@ fn recursive_unparsable_program(rules: &Rules) -> Result<(), String> {
         },
         Err(err) => {
             println!("partial tree:\n{}", display_of(err.partial_tree()));
-            println!("error: {}", err.error());
+            println!("expected error occurred -> {}", err.error());
             Ok(())
         },
     }
