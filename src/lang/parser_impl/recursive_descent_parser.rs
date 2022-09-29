@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::rc::Rc;
 
+use log::trace;
+
 use crate::lang::lexer::token::Token;
 use crate::lang::lexer::token::TokenKind;
 use crate::lang::parser::node::Node;
@@ -73,34 +75,43 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         &mut self,
         this_rule: &str,
     ) -> ParseResult<'a> {
-        let start_tokens = self.first_set[this_rule]
-            .iter()
-            .map(|it| it.name())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let start_tokens = {
+            let mut start_tokens = self.first_set[this_rule]
+                .iter()
+                .map(|it| it.name().to_string())
+                .collect::<Vec<_>>();
+            start_tokens.sort();
+            start_tokens.join(", ")
+        };
 
-        if self
+        let has_epsilon = self
             .rules
             .get_rule_by_name(this_rule)
             .borrow()
-            .has_epsilon()
-        {
-            let follow = &self.follow_set[this_rule]
-                .iter()
-                .map(TokenKind::name)
-                .collect::<Vec<_>>()
-                .join(", ");
+            .has_epsilon();
+
+        if has_epsilon {
+            let follow = {
+                let mut follow = self.follow_set[this_rule]
+                    .iter()
+                    .map(|it| it.name().to_string())
+                    .collect::<Vec<_>>();
+                follow.sort();
+                follow.join(", ")
+            };
 
             if !self.has_peek() {
                 self._err(format!(
-                    "unexpected end of input, expecting one of tokens: {} OR because of epsilon one of: {}",
+                    "rule: {} /// unexpected end of input, expecting one of tokens: {} /// OR because of epsilon one of: {}",
+                    this_rule,
                     start_tokens,
                     follow,
                 ))
             }
             else {
                 let err = format!(
-                    "unexpected token, expecting one of tokens: {} OR because of epsilon one of: {}, got: {}",
+                    "rule: {} /// unexpected token, expecting one of tokens: {} /// OR because of epsilon one of: {}, got: {}",
+                    this_rule,
                     start_tokens,
                     follow,
                     self.peek(),
@@ -110,7 +121,8 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         }
         else if self.has_peek() {
             let err = format!(
-                "unexpected token, expecting one of tokens: {} got: {}",
+                "rule: {} /// unexpected token, expecting one of tokens: {} got: {}",
+                this_rule,
                 start_tokens,
                 self.peek(),
             );
@@ -118,15 +130,15 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         }
         else {
             self._err(format!(
-                "unexpected end of input, expecting one of tokens: {}",
-                start_tokens,
+                "rule: {} /// unexpected end of input, expecting one of tokens: {}",
+                this_rule, start_tokens,
             ))
         }
     }
 
 
     fn pop_to_parent(&mut self) {
-        println!(
+        trace!(
             "popping to parent, we are at: {}",
             self.focus.borrow().rule_part().name()
         );
@@ -135,7 +147,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn pop_to_root(&mut self) {
-        println!(
+        trace!(
             "popping to root, we are at: {}",
             self.focus.borrow().rule_part().name()
         );
@@ -235,7 +247,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             ));
         }
 
-        println!(
+        trace!(
             "match tk, expecting: {}, current: {}",
             expecting.name(),
             self.peek().text
@@ -272,22 +284,21 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             Ok(Rc::clone(&self.focus))
         }
         else if self.peek_is_in_rule_first("fn_call") {
-            println!("parsing S, peek is in fn_call start");
             self.parse_fn_call()
         }
         else if self.peek_is_in_rule_first("fn_declaration") {
-            println!("parsing S, peek is in fn_declaration start");
             self.parse_fn_declaration()
         }
         else {
-            println!("err parsing S else");
             self.err_rule("S")
         }
     }
 
     fn parse_fn_call(&mut self) -> ParseResult<'a> {
-        println!("parsing fn_call");
-        self.push_to_rule("fn_call");
+        let my_name = "fn_call";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.match_tk(TokenKind::Id)?;
         self.match_tk(TokenKind::LeftParen)?;
@@ -301,66 +312,74 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_args(&mut self) -> ParseResult<'a> {
-        println!("parsing args");
-        self.push_to_rule("args");
+        let my_name = "args";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is_in_rule_first("arg") {
             self.parse_arg()?;
             self.parse_args_0()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("args") {
-            println!("parsing args epsilon error");
-            return self.err_rule("args");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else: Epsilon.
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_arg(&mut self) -> ParseResult<'a> {
-        println!("parsing arg");
-        self.push_to_rule("arg");
+        let my_name = "arg";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if !self.has_peek() {
-            println!("parsing arg eof");
-            return self.err_rule("arg");
+            self.err_rule(my_name)
         }
         else if self.peek_is(TokenKind::String) {
             self.match_tk(TokenKind::String)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Int) {
             self.match_tk(TokenKind::Int)?;
+            self.ok_parent()
         }
         else {
-            unreachable!();
+            self.err_rule(my_name)
         }
-
-        self.ok_parent()
     }
 
     fn parse_args_0(&mut self) -> ParseResult<'a> {
-        println!("parsing arg__0");
-        self.push_to_rule("args__0");
+        let my_name = "args__0";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is(TokenKind::Comma) {
             self.match_tk(TokenKind::Comma)?;
             self.parse_args()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("args__0") {
-            println!("parsing args__0 epsilon error");
-            return self.err_rule("args__0");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_fn_declaration(&mut self) -> ParseResult<'a> {
-        println!("parsing fn_declaration");
-        self.push_to_rule("fn_declaration");
+        let my_name = "fn_declaration";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.match_tk(TokenKind::Fn)?;
         self.match_tk(TokenKind::Id)?;
@@ -379,25 +398,29 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_params(&mut self) -> ParseResult<'a> {
-        println!("parsing params");
-        self.push_to_rule("params");
+        let my_name = "params";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is_in_rule_first("param") {
             self.parse_param()?;
             self.parse_params_0()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("params") {
-            println!("parsing params epsilon error");
-            return self.err_rule("params");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_param(&mut self) -> ParseResult<'a> {
-        println!("parsing param");
-        self.push_to_rule("param");
+        let my_name = "param";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.match_tk(TokenKind::Id)?;
         self.match_tk(TokenKind::Id)?;
@@ -406,118 +429,127 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_params_0(&mut self) -> ParseResult<'a> {
-        println!("parsing params__0");
-        self.push_to_rule("params__0");
+        let my_name = "params__0";
+        println!("parsing {}", my_name);
 
-        println!("PEEK: {}", self.peek());
-        println!("FOLLOW: {:?}", &self.follow_set["params__0"]);
+        self.push_to_rule(my_name);
+
         if self.peek_is(TokenKind::Comma) {
             self.match_tk(TokenKind::Comma)?;
             self.parse_params()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("params__0") {
-            println!("parsing params__0 epsilon error");
-            println!("PEEK: {}", self.tokens.peek().unwrap());
-            println!("FOLLOW: {:?}", &self.follow_set["params__0"]);
-            return self.err_rule("params__0");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon.
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_statements(&mut self) -> ParseResult<'a> {
-        println!("parsing statements");
-        self.push_to_rule("statements");
+        let my_name = "statements";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is_in_rule_first("statement") {
             self.parse_statement()?;
             self.parse_statements_0()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("statements") {
-            println!("parsing statements epsilon error");
-            return self.err_rule("statements");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon.
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_statement(&mut self) -> ParseResult<'a> {
-        println!("parsing statement");
-        self.push_to_rule("statement");
+        let my_name = "statement";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
-            self.parse_statements_0()?;
+            self.parse_statement_0()?;
+            self.ok_parent()
         }
         else if self.peek_is_in_rule_first("ret") {
             self.parse_ret()?;
+            self.ok_parent()
         }
         else {
-            println!("parsing statement epsilon error");
-            return self.err_rule("statement");
+            self.err_rule(my_name)
         }
-
-        self.ok_parent()
     }
 
     fn parse_statements_0(&mut self) -> ParseResult<'a> {
-        println!("parsing statements__0");
-        self.push_to_rule("statements__0");
+        let my_name = "statements__0";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
             self.parse_statement_0()?;
             self.parse_statements_0()?;
+            self.ok_parent()
         }
         else if self.peek_is_in_rule_first("ret") {
             self.match_tk(TokenKind::Return)?;
             self.parse_expressions()?;
-            self.match_tk(TokenKind::Comma)?;
+            self.match_tk(TokenKind::Semicolon)?;
             self.parse_statements_0()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("statements__0") {
-            println!("parsing statements__0 error");
-            return self.err_rule("statements__0");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon.
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_statement_0(&mut self) -> ParseResult<'a> {
-        println!("parsing statement__0");
-        self.push_to_rule("statement__0");
+        let my_name = "statement__0";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if !self.has_peek() {
-            println!("parsing statement__0 eof error");
-            return self.err_rule("statement__0");
+            self.err_rule(my_name)
         }
         else if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
             self.match_tk(TokenKind::Semicolon)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Equal) {
             self.match_tk(TokenKind::Equal)?;
             self.parse_expressions()?;
             self.match_tk(TokenKind::Semicolon)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::LeftParen) {
             self.match_tk(TokenKind::LeftParen)?;
             self.parse_args()?;
             self.match_tk(TokenKind::RightParen)?;
+            self.match_tk(TokenKind::Semicolon)?;
+            self.ok_parent()
         }
         else {
-            unreachable!();
+            self.err_rule(my_name)
         }
-
-        self.ok_parent()
     }
 
     fn parse_ret(&mut self) -> ParseResult<'a> {
-        println!("parsing ret");
-        self.push_to_rule("ret");
+        let my_name = "ret";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.match_tk(TokenKind::Return)?;
         self.parse_expressions()?;
@@ -527,8 +559,10 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_expressions(&mut self) -> ParseResult<'a> {
-        println!("parsing expressions");
-        self.push_to_rule("expressions");
+        let my_name = "expressions";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.parse_terms()?;
         self.parse_expressions_0()?;
@@ -537,8 +571,10 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_terms(&mut self) -> ParseResult<'a> {
-        println!("parsing terms");
-        self.push_to_rule("expressions");
+        let my_name = "terms";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         self.parse_factor()?;
         self.parse_terms_0()?;
@@ -547,73 +583,84 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     }
 
     fn parse_expressions_0(&mut self) -> ParseResult<'a> {
-        println!("parsing expressions__0");
-        self.push_to_rule("expressions__0");
+        let my_name = "expressions__0";
+        println!("parsing {}", my_name);
 
-        if self.peek_is(TokenKind::Plus) {
-            println!("parsing expressions0");
+        self.push_to_rule(my_name);
+
+        if !self.has_peek() {
+            self.err_rule(my_name)
+        }
+        else if self.peek_is(TokenKind::Plus) {
             self.match_tk(TokenKind::Plus)?;
             self.parse_expressions()?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Minus) {
             self.match_tk(TokenKind::Minus)?;
             self.parse_expressions()?;
+            self.ok_parent()
         }
-        else if !self.peek_is_in_rule_follow("expressions__0") {
-            println!("parsing expressions__0 epsilon error");
-            return self.err_rule("expressions__0");
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
-        // else -> Epsilon
-
-        self.ok_parent()
+        else {
+            self.err_rule(my_name)
+        }
     }
 
     fn parse_factor(&mut self) -> ParseResult<'a> {
-        println!("parsing factor");
-        self.push_to_rule("factor");
+        let my_name = "factor";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if !self.has_peek() {
-            println!("parsing factor eof error");
-            return self.err_rule("factor");
+            self.err_rule(my_name)
         }
         else if self.peek_is(TokenKind::LeftParen) {
             self.match_tk(TokenKind::LeftParen)?;
             self.parse_expressions()?;
             self.match_tk(TokenKind::RightParen)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Int) {
             self.match_tk(TokenKind::Int)?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
+            self.ok_parent()
         }
         else {
-            unreachable!();
+            self.err_rule(my_name)
         }
-
-        self.ok_parent()
     }
 
     fn parse_terms_0(&mut self) -> ParseResult<'a> {
-        println!("parsing terms__0");
-        self.push_to_rule("terms__0");
+        let my_name = "terms__0";
+        println!("parsing {}", my_name);
+
+        self.push_to_rule(my_name);
 
         if !self.has_peek() {
-            println!("parsing terms__0 eof error");
-            return self.err_rule("terms__0");
+            self.err_rule(my_name)
         }
         else if self.peek_is(TokenKind::Star) {
             self.match_tk(TokenKind::Star)?;
             self.parse_terms()?;
+            self.ok_parent()
         }
         else if self.peek_is(TokenKind::Slash) {
             self.match_tk(TokenKind::Slash)?;
             self.parse_terms()?;
+            self.ok_parent()
+        }
+        else if self.peek_is_in_rule_follow(my_name) {
+            self.ok_parent()
         }
         else {
-            unreachable!();
+            self.err_rule(my_name)
         }
-
-        self.ok_parent()
     }
 }
