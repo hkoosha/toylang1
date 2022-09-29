@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use log::trace;
+use pretty_env_logger::formatted_builder;
 use toylang1::lang::lexer::token::Token;
 use toylang1::lang::lexer::token::TokenKind;
 use toylang1::lang::lexer::v0::Lexer;
@@ -44,6 +46,19 @@ factor          -> ( expressions ) | INT | ID
 ret             -> RETURN expressions ;
 
 ";
+
+#[allow(dead_code)]
+fn yes() -> bool {
+    true
+}
+
+#[allow(dead_code)]
+fn en_log() {
+    let mut builder = formatted_builder();
+    builder.parse_filters("trace");
+    builder.try_init().unwrap();
+    trace!("log enabled");
+}
 
 #[allow(clippy::needless_collect)]
 fn correct_program(rules: &Rules) -> Result<(), String> {
@@ -104,12 +119,19 @@ fn incorrect_program(rules: &Rules) -> Result<(), String> {
 }
 
 fn i_am_game(rules: &Rules) -> Result<(), String> {
+    // if yes() {
+    //     return Ok(());
+    // }
+
     println!("\n\n===================================================\n\n");
 
-    correct_program(&rules)?;
+    println!("correct");
+    correct_program(rules)?;
 
     println!("\n\n===================================================\n\n");
-    incorrect_program(&rules)?;
+
+    println!("incorrect");
+    incorrect_program(rules)?;
 
     println!("\n\n===================================================\n\n");
 
@@ -151,13 +173,15 @@ fn first_follow_start(rules: &Rules) {
 
 #[allow(clippy::needless_collect)]
 fn main() -> Result<(), String> {
+    // en_log();
+
+    println!("\n\n===================================================\n\n");
+
     let mut rules: Rules = GRAMMAR.try_into()?;
     rules.eliminate_left_recursions();
     rules.validate()?;
 
-    if "haha".parse::<usize>().is_ok() {
-        i_am_game(&rules)?;
-    }
+    i_am_game(&rules)?;
 
     rules.make_ready_for_recursive_decent(128)?;
     rules.is_backtrack_free()?;

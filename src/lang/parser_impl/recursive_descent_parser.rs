@@ -254,10 +254,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         &self,
         rule_name: &str,
     ) -> Vec<TokenKind> {
-        self.first_set[rule_name]
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>()
+        self.first_set[rule_name].to_vec()
     }
 
 
@@ -376,7 +373,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             self.parse_args()?;
         }
         else if !self.peek_is_in_rule_follow("args__0") {
-            println!("parsing args__0 epsilone error");
+            println!("parsing args__0 epsilon error");
             return self.err_rule("args__0");
         }
         // else -> Epsilon
@@ -443,6 +440,8 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         }
         else if !self.peek_is_in_rule_follow("params__0") {
             println!("parsing params__0 epsilon error");
+            println!("PEEK: {}", self.tokens.peek().unwrap());
+            println!("FOLLOW: {:?}", &self.follow_set["params__0"]);
             return self.err_rule("params__0");
         }
         // else -> Epsilon.
