@@ -7,13 +7,14 @@ use log::trace;
 
 use crate::lang::lexer::token::Token;
 use crate::lang::lexer::token::TokenKind;
+use crate::lang::lexer::v0::LexerResult;
 use crate::lang::parser::node::Node;
 use crate::lang::parser::node::ParseError;
 use crate::lang::parser::node::ParseResult;
 use crate::lang::parser::rule::RulePart;
 use crate::lang::parser::rules::Rules;
 
-pub fn recursive_descent_parse<'a, T: Iterator<Item = Token<'a>>>(
+pub fn recursive_descent_parse<'a, T: Iterator<Item = LexerResult<'a>>>(
     rules: &Rules,
     tokens: T,
 ) -> ParseResult<'a> {
@@ -21,7 +22,7 @@ pub fn recursive_descent_parse<'a, T: Iterator<Item = Token<'a>>>(
 }
 
 
-struct RecursiveDescentParser<'a, 'b, T: Iterator<Item = Token<'a>>> {
+struct RecursiveDescentParser<'a, 'b, T: Iterator<Item = LexerResult<'a>>> {
     rules: &'b Rules,
 
     first_set: HashMap<String, Vec<TokenKind>>,
@@ -31,7 +32,7 @@ struct RecursiveDescentParser<'a, 'b, T: Iterator<Item = Token<'a>>> {
     focus: Rc<RefCell<Node<'a>>>,
 }
 
-impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
+impl<'a, 'b, T: Iterator<Item = LexerResult<'a>>> RecursiveDescentParser<'a, 'b, T> {
     fn new(
         rules: &'b Rules,
         tokens: T,
@@ -114,7 +115,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
                     this_rule,
                     start_tokens,
                     follow,
-                    self.peek(),
+                    self.peek().unwrap(),
                 );
                 self._err(err)
             }
@@ -124,7 +125,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
                 "rule: {} /// unexpected token, expecting one of tokens: {} got: {}",
                 this_rule,
                 start_tokens,
-                self.peek(),
+                self.peek().unwrap(),
             );
             self._err(err)
         }
@@ -191,15 +192,26 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         self.tokens.peek().is_some()
     }
 
-    fn peek(&mut self) -> &Token<'a> {
-        self.tokens.peek().unwrap()
+    fn peek(&mut self) -> Result<&Token<'a>, String> {
+        match self.tokens.peek() {
+            None => {
+                panic!("peek called while no more token is remaining")
+            },
+            Some(peek) => match peek {
+                Ok(peek) => Ok(peek),
+                Err(err) => Err(format!(
+                    "lexer error, position: {} line: {}, error: {}",
+                    err.position, err.line, err.error
+                )),
+            },
+        }
     }
 
     fn peek_is_in(
         &mut self,
         expecting: &[TokenKind],
     ) -> bool {
-        self.has_peek() && expecting.contains(&self.peek().token_kind)
+        self.has_peek() && expecting.contains(&self.peek().unwrap().token_kind)
     }
 
     fn peek_is_in_rule_first(
@@ -210,7 +222,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             false
         }
         else {
-            let tk = self.peek().token_kind;
+            let tk = self.peek().unwrap().token_kind;
             self.first_set[rule_name].contains(&tk)
         }
     }
@@ -223,7 +235,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             false
         }
         else {
-            let tk = self.peek().token_kind;
+            let tk = self.peek().unwrap().token_kind;
             self.follow_set[rule_name].contains(&tk)
         }
     }
@@ -247,26 +259,41 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             ));
         }
 
+        match self.peek() {
+            Ok(_) => {},
+            Err(err) => {
+                self.pop_to_root();
+                return Err(ParseError::new(&self.focus, err));
+            },
+        }
+
         trace!(
             "match tk, expecting: {}, current: {}",
             expecting.name(),
-            self.peek().text
+            self.peek().unwrap().text
         );
 
-        if self.peek().token_kind == expecting {
+        if self.peek().unwrap().token_kind == expecting {
             let node = self.node_by_token_kind(expecting);
-            node.borrow_mut().set_token(self.tokens.next().unwrap());
+            node.borrow_mut()
+                .set_token(self.tokens.next().unwrap().unwrap());
             self.focus.borrow_mut().append_child(&node);
-
-            Ok(Rc::clone(&self.focus))
         }
         else {
             let err = format!(
                 "unexpected token kind, expecting: {}, got: {}",
                 expecting,
-                self.peek(),
+                self.peek().unwrap(),
             );
-            self._err(err)
+            return self._err(err);
+        }
+
+        match self.peek() {
+            Ok(_) => Ok(Rc::clone(&self.focus)),
+            Err(err) => {
+                self.pop_to_root();
+                return Err(ParseError::new(&self.focus, err));
+            },
         }
     }
 

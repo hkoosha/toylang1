@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 
 use log::trace;
 use pretty_env_logger::formatted_builder;
-use toylang1::lang::lexer::token::Token;
 use toylang1::lang::lexer::token::TokenKind;
 use toylang1::lang::lexer::v0::Lexer;
 use toylang1::lang::parser::node::display_of;
@@ -35,6 +34,13 @@ const SAMPLE_CORRECT_PROGRAM_1: &str = "\
 #[allow(dead_code)]
 const SAMPLE_INCORRECT_PROGRAM: &str = "\
     fn my_thing42(int j) {
+    ";
+
+#[allow(dead_code)]
+const SAMPLE_UNPARSABLE_PROGRAM: &str = "\
+    fn my_thing42(int j) {
+        123abc = 1 * 2;
+    }
     ";
 
 const GRAMMAR: &str = "
@@ -168,9 +174,8 @@ fn backtracking(rules: &Rules) -> Result<(), String> {
 #[allow(clippy::needless_collect)]
 fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    let iter: Vec<Token<'_>> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
 
-    match recursive_descent_parse(rules, iter.into_iter()) {
+    match recursive_descent_parse(rules, lexer.into_iter()) {
         Ok(tree) => {
             println!("tree:\n{}", display_of(&tree));
             Ok(())
@@ -185,9 +190,8 @@ fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
 #[allow(clippy::needless_collect)]
 fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
-    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
 
-    match recursive_descent_parse(rules, iter.into_iter()) {
+    match recursive_descent_parse(rules, lexer.into_iter()) {
         Ok(tree) => {
             println!("tree:\n{}", display_of(&tree));
             Err("expecting failure".to_string())
@@ -199,12 +203,31 @@ fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
     }
 }
 
+fn recursive_unparsable_program(rules: &Rules) -> Result<(), String> {
+    let lexer: Lexer = SAMPLE_UNPARSABLE_PROGRAM.into();
+
+    match recursive_descent_parse(rules, lexer.into_iter()) {
+        Ok(tree) => {
+            println!("tree:\n{}", display_of(&tree));
+            Err("expecting failure".to_string())
+        },
+        Err(err) => {
+            println!("partial tree:\n{}", display_of(err.partial_tree()));
+            println!("error: {}", err.error());
+            Ok(())
+        },
+    }
+}
+
 fn recursive(rules: &Rules) -> Result<(), String> {
     println!("\n\n===================================================\n\n");
     recursive_correct_program(rules)?;
 
     println!("\n\n===================================================\n\n");
     recursive_incorrect_program(rules)?;
+
+    println!("\n\n===================================================\n\n");
+    recursive_unparsable_program(rules)?;
 
     println!("\n\n===================================================\n\n");
     Ok(())
