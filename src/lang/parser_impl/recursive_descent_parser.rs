@@ -273,13 +273,13 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
     // ============================================================================================
 
     fn parse_s(mut self) -> ParseResult<'a> {
-        println!("parsing S");
+        trace!("parsing S");
         let node = self.node_by_rule("S");
         self.focus.borrow_mut().append_child(&node);
         self.focus = node;
 
         if !self.has_peek() {
-            println!("FIN Without start");
+            trace!("FIN Without start");
             self.pop_to_root();
             Ok(Rc::clone(&self.focus))
         }
@@ -296,7 +296,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_fn_call(&mut self) -> ParseResult<'a> {
         let my_name = "fn_call";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -313,7 +313,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_args(&mut self) -> ParseResult<'a> {
         let my_name = "args";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -332,7 +332,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_arg(&mut self) -> ParseResult<'a> {
         let my_name = "arg";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -358,7 +358,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_args_0(&mut self) -> ParseResult<'a> {
         let my_name = "args__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -377,7 +377,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_fn_declaration(&mut self) -> ParseResult<'a> {
         let my_name = "fn_declaration";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -399,7 +399,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_params(&mut self) -> ParseResult<'a> {
         let my_name = "params";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -418,7 +418,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_param(&mut self) -> ParseResult<'a> {
         let my_name = "param";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -430,7 +430,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_params_0(&mut self) -> ParseResult<'a> {
         let my_name = "params__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -449,7 +449,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_statements(&mut self) -> ParseResult<'a> {
         let my_name = "statements";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -468,7 +468,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_statement(&mut self) -> ParseResult<'a> {
         let my_name = "statement";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -488,7 +488,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_statements_0(&mut self) -> ParseResult<'a> {
         let my_name = "statements__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -515,7 +515,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_statement_0(&mut self) -> ParseResult<'a> {
         let my_name = "statement__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -547,7 +547,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_ret(&mut self) -> ParseResult<'a> {
         let my_name = "ret";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -560,7 +560,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_expressions(&mut self) -> ParseResult<'a> {
         let my_name = "expressions";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -572,7 +572,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_terms(&mut self) -> ParseResult<'a> {
         let my_name = "terms";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -584,7 +584,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_expressions_0(&mut self) -> ParseResult<'a> {
         let my_name = "expressions__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -611,7 +611,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_factor(&mut self) -> ParseResult<'a> {
         let my_name = "factor";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 
@@ -639,7 +639,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
     fn parse_terms_0(&mut self) -> ParseResult<'a> {
         let my_name = "terms__0";
-        println!("parsing {}", my_name);
+        trace!("parsing {}", my_name);
 
         self.push_to_rule(my_name);
 

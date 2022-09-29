@@ -68,83 +68,6 @@ fn en_log() {
     trace!("log enabled");
 }
 
-#[allow(clippy::needless_collect)]
-fn correct_program(rules: &Rules) -> Result<(), String> {
-    println!("correct");
-
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    for token in lexer {
-        token?;
-    }
-
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    // Parsed successfully above, ok to unwrap.
-    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
-
-    let parsed = parse_with_backtracking(rules, tokens.into_iter());
-
-    match parsed {
-        Ok(parse_tree) => {
-            let display = display_of(&parse_tree);
-            println!("parsed successfully:\n{}", display);
-        },
-        Err(parse_error) => {
-            return Err(format!("unexpected error: {}", parse_error));
-        },
-    }
-
-    Ok(())
-}
-
-#[allow(clippy::needless_collect)]
-fn incorrect_program(rules: &Rules) -> Result<(), String> {
-    println!("incorrect");
-
-    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
-    for token in lexer {
-        token?;
-    }
-
-    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
-    // Parsed successfully above, ok to unwrap.
-    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
-
-    let parsed = parse_with_backtracking(rules, tokens.into_iter());
-
-    match parsed {
-        Ok(parse_tree) => {
-            panic!(
-                "expecting error, got parse tree: {}",
-                &display_of(&parse_tree)[0..32]
-            );
-        },
-        Err(parse_error) => {
-            println!(
-                "parsed unsuccessfully as expected, error={}, partial tree:\n{}",
-                parse_error.error(),
-                display_of(parse_error.partial_tree())
-            );
-        },
-    }
-
-    Ok(())
-}
-
-fn i_am_game(rules: &Rules) -> Result<(), String> {
-    println!("\n\n===================================================\n\n");
-    correct_program(rules)?;
-    println!("\n\n===================================================\n\n");
-
-    if yes() {
-        return Ok(());
-    }
-
-    incorrect_program(rules)?;
-    println!("\n\n===================================================\n\n");
-
-    Ok(())
-}
-
 fn first_follow_start(rules: &Rules) {
     println!("\n\n===================================================\n\n");
 
@@ -178,6 +101,127 @@ fn first_follow_start(rules: &Rules) {
         .for_each(|it| println!("follow of {} => {:?}", it.0, it.1));
 }
 
+
+#[allow(clippy::needless_collect)]
+fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
+    println!("correct");
+
+    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
+    for token in lexer {
+        token?;
+    }
+
+    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
+    // Parsed successfully above, ok to unwrap.
+    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
+
+    let parsed = parse_with_backtracking(rules, tokens.into_iter());
+
+    match parsed {
+        Ok(parse_tree) => {
+            let display = display_of(&parse_tree);
+            println!("parsed successfully:\n{}", display);
+        },
+        Err(parse_error) => {
+            return Err(format!("unexpected error: {}", parse_error));
+        },
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::needless_collect)]
+fn backtracking_incorrect_program(rules: &Rules) -> Result<(), String> {
+    println!("incorrect");
+
+    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
+    for token in lexer {
+        token?;
+    }
+
+    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
+    // Parsed successfully above, ok to unwrap.
+    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
+
+    let parsed = parse_with_backtracking(rules, tokens.into_iter());
+
+    match parsed {
+        Ok(parse_tree) => {
+            panic!(
+                "expecting error, got parse tree: {}",
+                &display_of(&parse_tree)[0..32]
+            );
+        },
+        Err(parse_error) => {
+            println!(
+                "parsed unsuccessfully as expected, error={}, partial tree:\n{}",
+                parse_error.error(),
+                display_of(parse_error.partial_tree())
+            );
+        },
+    }
+
+    Ok(())
+}
+
+fn backtracking(rules: &Rules) -> Result<(), String> {
+    println!("\n\n===================================================\n\n");
+    backtracking_correct_program(rules)?;
+
+    println!("\n\n===================================================\n\n");
+    backtracking_incorrect_program(rules)?;
+
+    println!("\n\n===================================================\n\n");
+    Ok(())
+}
+
+
+#[allow(clippy::needless_collect)]
+fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
+    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
+    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
+
+    match recursive_descent_parse(rules, iter.into_iter()) {
+        Ok(tree) => {
+            println!("tree:\n{}", display_of(&tree));
+            Ok(())
+        },
+        Err(err) => {
+            println!("partial tree:\n{}", display_of(err.partial_tree()));
+            Err(err.error().to_string())?
+        },
+    }
+}
+
+#[allow(clippy::needless_collect)]
+fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
+    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
+    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
+
+    match recursive_descent_parse(rules, iter.into_iter()) {
+        Ok(tree) => {
+            println!("tree:\n{}", display_of(&tree));
+            Err("expecting failure".to_string())
+        },
+        Err(err) => {
+            println!("partial tree:\n{}", display_of(err.partial_tree()));
+            Ok(())
+        },
+    }
+}
+
+fn recursive(rules: &Rules) -> Result<(), String> {
+    println!("\n\n===================================================\n\n");
+    recursive_correct_program(rules)?;
+
+    println!("\n\n===================================================\n\n");
+    recursive_incorrect_program(rules)?;
+
+    println!("\n\n===================================================\n\n");
+    Ok(())
+}
+
+
 #[allow(clippy::needless_collect)]
 fn main() -> Result<(), String> {
     // en_log();
@@ -187,28 +231,22 @@ fn main() -> Result<(), String> {
     let mut rules: Rules = GRAMMAR.try_into()?;
     rules.eliminate_left_recursions();
     rules.validate()?;
-
     println!("left-recursion-free: {}", rules);
-
-    i_am_game(&rules)?;
-
-    rules.make_ready_for_recursive_decent(128)?;
-    rules.is_backtrack_free()?;
-    println!("backtrack-free: {}", rules);
-
-    first_follow_start(&rules);
 
     println!("\n\n===================================================\n\n");
 
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    let iter: Vec<Token> = lexer.into_iter().map(|it| it.unwrap()).collect::<Vec<_>>();
-    match recursive_descent_parse(&rules, iter.into_iter()) {
-        Ok(tree) => println!("tree:\n{}", display_of(&tree)),
-        Err(err) => {
-            println!("partial tree:\n{}", display_of(err.partial_tree()));
-            Err(err.error().to_string())?
-        },
-    }
+    backtracking(&rules)?;
+
+    println!("\n\n===================================================\n\n");
+
+    rules.make_ready_for_recursive_decent(128)?;
+    rules.is_backtrack_free()?;
+    first_follow_start(&rules);
+    println!("backtrack-free: {}", rules);
+
+    println!("\n\n===================================================\n\n");
+
+    recursive(&rules)?;
 
     println!("\n\n");
 
