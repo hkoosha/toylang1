@@ -263,8 +263,8 @@ impl Display for Token<'_> {
     ) -> std::fmt::Result {
         write!(
             f,
-            "Token[{}~{}-{} / {}]",
-            self.start_pos, self.end_pos, self.token_kind, self.text
+            "Token[L{} / {}~{}-{} / {}]",
+            self.line, self.start_pos, self.end_pos, self.token_kind, self.text
         )
     }
 }
