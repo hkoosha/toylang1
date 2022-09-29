@@ -90,7 +90,9 @@ impl Rules {
             for alternatives in description.split('|').map(str::trim) {
                 rule.borrow_mut().add_alt();
                 for alt in alternatives.split(' ').map(str::trim) {
-                    match TokenKind::from_repr(alt).or_else(|_| TokenKind::from_name(alt)) {
+                    match TokenKind::from_repr_including_epsilon(alt)
+                        .or_else(|_| TokenKind::from_name(alt))
+                    {
                         Ok(token_kind) => {
                             // It's a token, add it as a token.
                             rule.borrow_mut().push_last(token_kind.into());
@@ -583,6 +585,7 @@ impl Rules {
                     for part_no in 0..alt.len() - 1 {
                         let part = &alt[part_no];
                         let part_first = &first[&part.name()];
+
                         if part_first.contains(&TokenKind::Epsilon) {
                             let next_part_first = first[&alt[part_no + 1].name()].iter().cloned();
                             rhs.extend(next_part_first);
@@ -601,7 +604,7 @@ impl Rules {
 
                     let rule_first: &mut HashSet<TokenKind> =
                         first.get_mut(rule.borrow().name()).unwrap();
-                    any_change = extend(rule_first, rhs);
+                    any_change = any_change || extend(rule_first, rhs);
                 }
             }
 
@@ -647,10 +650,21 @@ impl Rules {
                     for part in alt.iter().rev() {
                         if part.is_rule() {
                             let part_follow = follow.get_mut(&part.name()).unwrap();
+
                             any_change = any_change || extend(part_follow, trailer.clone());
 
-                            trailer = first[&part.name()].clone();
-                            trailer.remove(&TokenKind::Epsilon);
+                            let part_first_no_epsilon: Vec<_> = first[&part.name()]
+                                .iter()
+                                .filter(|it| !it.is_epsilon())
+                                .cloned()
+                                .collect();
+                            if first[&part.name()].contains(&TokenKind::Epsilon) {
+                                extend(&mut trailer, part_first_no_epsilon);
+                            }
+                            else {
+                                trailer.clear();
+                                extend(&mut trailer, part_first_no_epsilon);
+                            }
                         }
                         else {
                             trailer.clear();
@@ -918,7 +932,6 @@ impl Clone for Rules {
     }
 }
 
-// FIXME worst implementation :/
 impl Display for Rules {
     fn fmt(
         &self,
@@ -1247,11 +1260,12 @@ Rules[
 
         let r0 = first.remove("r0").unwrap();
         let r1 = first.remove("r1").unwrap();
-        assert_eq!(r0.len(), 2);
+        assert_eq!(r0.len(), 3);
         assert_eq!(r1.len(), 1);
 
-        assert!(r0.contains(&TokenKind::Epsilon));
         assert!(r0.contains(&TokenKind::String));
+        assert!(r0.contains(&TokenKind::Id));
+        assert!(r0.contains(&TokenKind::Epsilon));
         assert!(r1.contains(&TokenKind::String));
     }
 
