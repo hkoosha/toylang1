@@ -71,23 +71,6 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         Err(ParseError::new(&self.focus, msg))
     }
 
-    fn err_token_kind(
-        &mut self,
-        expecting: &[TokenKind],
-    ) -> ParseResult<'a> {
-        self._err(format!(
-            "unexpected token kind, expecting: {}, got: {}",
-            expecting
-                .iter()
-                .map(|it| it.name())
-                .collect::<Vec<_>>()
-                .join(", "),
-            self.current_word
-                .as_ref()
-                .map_or_else(|| "EOF".to_string(), |it| it.to_string())
-        ))
-    }
-
     fn err_rule(
         &mut self,
         this_rule: &str,
@@ -110,7 +93,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            if self.current_word.is_none() {
+            if !self.has_peek() {
                 self._err(format!(
                     "unexpected end of input, expecting one of tokens: {} OR because of epsilon one of: {}",
                     start_tokens,
@@ -118,38 +101,31 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
                 ))
             }
             else {
-                self._err(format!(
+                let err = format!(
                     "unexpected token, expecting one of tokens: {} OR because of epsilon one of: {}, got: {}",
                     start_tokens,
                     follow,
-                    self.current_word.as_ref().unwrap(),
-                ))
+                    self.peek(),
+                );
+                self._err(err)
             }
         }
-        else if self.current_word.is_none() {
+        else if self.has_peek() {
+            let err = format!(
+                "unexpected token, expecting one of tokens: {} got: {}",
+                start_tokens,
+                self.peek(),
+            );
+            self._err(err)
+        }
+        else {
             self._err(format!(
                 "unexpected end of input, expecting one of tokens: {}",
                 start_tokens,
             ))
         }
-        else {
-            self._err(format!(
-                "unexpected token, expecting one of tokens: {} got: {}",
-                start_tokens,
-                self.current_word.as_ref().unwrap(),
-            ))
-        }
     }
 
-
-    fn consume_and_next(&mut self) -> Token<'a> {
-        let mut current: Option<Token> = None;
-        std::mem::swap(&mut self.current_word, &mut current);
-        self.current_word = self.tokens.next();
-        let c = current.unwrap();
-        println!("Token: {}", c.text);
-        c
-    }
 
     fn pop_to_parent(&mut self) {
         println!(
@@ -242,7 +218,6 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         }
     }
 
-
     fn peek_is(
         &mut self,
         tk: TokenKind,
@@ -250,35 +225,38 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         self.peek_is_in(&[tk])
     }
 
-    fn expecting(
-        &self,
-        rule_name: &str,
-    ) -> Vec<TokenKind> {
-        self.first_set[rule_name].to_vec()
-    }
-
 
     fn match_tk(
         &mut self,
         expecting: TokenKind,
     ) -> ParseResult<'a> {
-        if self.current_word.is_none() {
-            self.current_word = self.tokens.next();
-        }
+        println!("match tk, current {:?}", self.current_word);
 
-        let word = match &self.current_word {
-            None => return self.err_token_kind(&[expecting]),
+        let current_word = match &self.current_word {
+            None => {
+                return self._err(format!(
+                    "unexpected token kind, expecting: {}, got nothing",
+                    expecting,
+                ));
+            },
             Some(word) => word,
         };
 
-        if word.token_kind == expecting {
+        if current_word.token_kind == expecting {
             let node = self.node_by_token_kind(expecting);
-            node.borrow_mut().set_token(self.consume_and_next());
+            node.borrow_mut().consume_token(&mut self.current_word);
             self.focus.borrow_mut().append_child(&node);
-            return Ok(Rc::clone(&self.focus));
-        }
+            self.current_word = self.tokens.next();
 
-        self.err_token_kind(&[expecting])
+            println!("Token: {}", node.borrow().token().unwrap());
+            Ok(Rc::clone(&self.focus))
+        }
+        else {
+            self._err(format!(
+                "unexpected token kind, expecting: {}, got: {}",
+                expecting, current_word,
+            ))
+        }
     }
 
     // ============================================================================================
@@ -295,16 +273,16 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
             Ok(Rc::clone(&self.focus))
         }
         else if self.peek_is_in_rule_first("fn_call") {
+            self.current_word = self.tokens.next();
             self.parse_fn_call()
         }
         else if self.peek_is_in_rule_first("fn_declaration") {
+            self.current_word = self.tokens.next();
             self.parse_fn_declaration()
         }
         else {
             println!("err parsing S else");
-            let mut expecting_fn = self.expecting("fn_call");
-            expecting_fn.extend(self.expecting("fn_declaration"));
-            self.err_token_kind(&expecting_fn)
+            self.err_rule("S")
         }
     }
 
@@ -346,7 +324,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
         if !self.has_peek() {
             println!("parsing arg eof");
-            return self.err_token_kind(&[TokenKind::String, TokenKind::Id, TokenKind::Int]);
+            return self.err_rule("arg");
         }
         else if self.peek_is(TokenKind::String) {
             self.match_tk(TokenKind::String)?;
@@ -479,9 +457,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
         }
         else {
             println!("parsing statement epsilon error");
-            let mut expecting = self.first_set["ret"].clone();
-            expecting.push(TokenKind::Id);
-            return self.err_token_kind(&expecting);
+            return self.err_rule("statement");
         }
 
         self.ok_parent()
@@ -517,7 +493,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
         if !self.has_peek() {
             println!("parsing statement__0 eof error");
-            return self.err_token_kind(&[TokenKind::Id, TokenKind::Equal, TokenKind::LeftParen]);
+            return self.err_rule("statement__0");
         }
         else if self.peek_is(TokenKind::Id) {
             self.match_tk(TokenKind::Id)?;
@@ -599,7 +575,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
         if !self.has_peek() {
             println!("parsing factor eof error");
-            return self.err_token_kind(&[TokenKind::LeftParen, TokenKind::Int, TokenKind::Id]);
+            return self.err_rule("factor");
         }
         else if self.peek_is(TokenKind::LeftParen) {
             self.match_tk(TokenKind::LeftParen)?;
@@ -625,7 +601,7 @@ impl<'a, 'b, T: Iterator<Item = Token<'a>>> RecursiveDescentParser<'a, 'b, T> {
 
         if !self.has_peek() {
             println!("parsing terms__0 eof error");
-            return self.err_token_kind(&[TokenKind::Star, TokenKind::Slash]);
+            return self.err_rule("terms__0");
         }
         else if self.peek_is(TokenKind::Star) {
             self.match_tk(TokenKind::Star)?;

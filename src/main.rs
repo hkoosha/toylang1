@@ -12,7 +12,7 @@ use toylang1::lang::parser_impl::backtracking_parser::parse_with_backtracking;
 use toylang1::lang::parser_impl::recursive_descent_parser::recursive_descent_parse;
 
 const SAMPLE_CORRECT_PROGRAM: &str = "\
-    fn my_thing42(int j) {
+    fn my_thing42(int j, string q) {
         x1 = 1 * 30;
         x2 = x3 / 10;
         int y;
