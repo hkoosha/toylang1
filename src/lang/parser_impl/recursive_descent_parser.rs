@@ -297,6 +297,7 @@ impl<'a, 'b, T: Iterator<Item = LexerResult<'a>>> RecursiveDescentParser<'a, 'b,
         }
     }
 
+
     // ============================================================================================
 
     fn parse_s(mut self) -> ParseResult<'a> {

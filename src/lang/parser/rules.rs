@@ -149,78 +149,126 @@ impl Rules {
 
 
     pub fn validate(&self) -> Result<(), String> {
-        for r in &self.rules {
-            if let Err(err) = r.borrow().validate() {
-                return Err(format!(
-                    "invalid rule, rule_name={} error={}, rule={}",
-                    r.borrow().name(),
-                    err,
-                    r.borrow(),
-                ));
+        // Sub-rule error.
+        {
+            let mut sub_rule_errors = vec![];
+            for r in &self.rules {
+                if let Err(err) = r.borrow().validate() {
+                    sub_rule_errors.push(format!(
+                        "invalid rule, rule_name={} error={}, rule={}",
+                        r.borrow().name(),
+                        err,
+                        r.borrow(),
+                    ));
+                }
+            }
+            if !sub_rule_errors.is_empty() {
+                return Err(sub_rule_errors.join(" | "));
             }
         }
 
         // Duplicate rule.
-        let mut seen = HashSet::new();
-        for r in &self.rules {
-            if !seen.insert(r.borrow().name().to_string()) {
-                return Err(format!("duplicate rule: {}", r.borrow().name()));
+        {
+            let mut seen = HashSet::new();
+            let mut duplicate_rules = vec![];
+            for r in &self.rules {
+                if !seen.insert(r.borrow().name().to_string()) {
+                    duplicate_rules.push(r.borrow().name().to_string());
+                }
+            }
+            if !duplicate_rules.is_empty() {
+                return Err(format!("duplicate rules: {}", duplicate_rules.join(", ")));
             }
         }
 
         // Duplicate recursion elimination number.
-        let numbers = get_sorted_recursion_elimination_numbers(self);
-        for i in 0..numbers.len() - 1 {
-            if numbers[i] == numbers[i + 1] {
-                return Err(format!(
-                    "duplicate recursion elimination rule: {}",
-                    numbers[i]
-                ));
-            }
-        }
-
-        fn find_missing_rule(
-            rules: &Rules,
-            r: &Rc<RefCell<Rule>>,
-            seen: &mut HashSet<String>,
-        ) -> Result<(), String> {
-            if !seen.insert(r.borrow().name().to_string()) {
-                return Ok(());
-            }
-
-            for alt in &r.borrow().alternatives {
-                for part in alt {
-                    if part.is_rule() {
-                        if !rules.has_rule(part.get_rule().borrow().name()) {
-                            return Err(format!(
-                                "missing rule: {}",
-                                part.get_rule().borrow().name()
-                            ));
-                        }
-                        find_missing_rule(rules, &part.get_rule(), seen)?;
-                    }
+        {
+            let numbers = get_sorted_recursion_elimination_numbers(self);
+            let mut duplicate_numbers = vec![];
+            for i in 0..numbers.len() - 1 {
+                if numbers[i] == numbers[i + 1] && !duplicate_numbers.contains(&i) {
+                    duplicate_numbers.push(i);
                 }
             }
-            Ok(())
+            if !duplicate_numbers.is_empty() {
+                return Err(format!(
+                    "duplicate recursion elimination rule: {}",
+                    duplicate_numbers
+                        .into_iter()
+                        .map(|it| it.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
         }
 
         // A missing rule referenced in another rule.
-        let mut seen = HashSet::new();
-        for r in &self.rules {
-            find_missing_rule(self, r, &mut seen)?
-        }
+        {
+            fn find_missing_rule(
+                rules: &Rules,
+                r: &Rc<RefCell<Rule>>,
+                seen: &mut HashSet<String>,
+                missing: &mut HashSet<String>,
+            ) {
+                if !seen.insert(r.borrow().name().to_string()) {
+                    return;
+                }
 
-        for r in &self.rules {
-            if r.borrow().alternatives.is_empty() {
+                for alt in &r.borrow().alternatives {
+                    for part in alt {
+                        if part.is_rule() {
+                            if !rules.has_rule(part.get_rule().borrow().name()) {
+                                missing.insert(part.name());
+                            }
+                            find_missing_rule(rules, &part.get_rule(), seen, missing);
+                        }
+                    }
+                }
+            }
+            let mut seen = HashSet::new();
+            let mut missing = HashSet::new();
+            for r in &self.rules {
+                find_missing_rule(self, r, &mut seen, &mut missing);
+            }
+            if !missing.is_empty() {
                 return Err(format!(
-                    "rule has has no alternative: {}",
-                    r.borrow().name()
+                    "missing rules: {}",
+                    missing.into_iter().collect::<Vec<_>>().join(", ")
                 ));
             }
-            for alt in &r.borrow().alternatives {
-                if alt.is_empty() {
-                    return Err(format!("rule has empty alternative: {}", r.borrow().name()));
+        }
+
+        // Rule with no alternative
+        {
+            let mut no_alternative = Vec::new();
+            for r in &self.rules {
+                if r.borrow().alternatives.is_empty() {
+                    no_alternative.push(r.borrow().name().to_string());
                 }
+            }
+            if !no_alternative.is_empty() {
+                return Err(format!(
+                    "rules have no alternative: {}",
+                    no_alternative.join(", "),
+                ));
+            }
+        }
+
+        // Rule with empty alternative
+        {
+            let mut empty_alternative = Vec::new();
+            for r in &self.rules {
+                for alt in &r.borrow().alternatives {
+                    if alt.is_empty() {
+                        empty_alternative.push(r.borrow().name().to_string());
+                    }
+                }
+            }
+            if !empty_alternative.is_empty() {
+                return Err(format!(
+                    "rules have empty alternative: {}",
+                    empty_alternative.join(", "),
+                ));
             }
         }
 
