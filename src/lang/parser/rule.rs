@@ -579,10 +579,10 @@ mod tests {
 
         r0.borrow_mut().add_alt();
         r0.borrow_mut().push_last(r0.clone().into());
-        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().push_last(r1.into());
         r0.borrow_mut().add_alt();
         r0.borrow_mut().push_last(r0.clone().into());
-        r0.borrow_mut().push_last(r2.clone().into());
+        r0.borrow_mut().push_last(r2.into());
 
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 r2]");
         assert!(r0
@@ -606,11 +606,11 @@ mod tests {
 
         r0.borrow_mut().add_alt();
         r0.borrow_mut().push_last(r0.clone().into());
-        r0.borrow_mut().push_last(r1.clone().into());
+        r0.borrow_mut().push_last(r1.into());
         r0.borrow_mut().add_alt();
         r0.borrow_mut().push_last(r0.clone().into());
         r0.borrow_mut().add_alt();
-        r0.borrow_mut().push_last(r2.clone().into());
+        r0.borrow_mut().push_last(r2.into());
 
         assert_eq!(format!("{}", r0.borrow()), "Rule[r0 -> r0 r1 | r0 | r2]");
         assert!(r0
@@ -624,7 +624,7 @@ mod tests {
 
     #[test]
     fn test_bad_rule_name() {
-        assert_eq!(false, is_valid_rule_name("a b"));
-        assert_eq!(false, is_valid_rule_name("a,b"));
+        assert!(!is_valid_rule_name("a b"));
+        assert!(!is_valid_rule_name("a,b"));
     }
 }

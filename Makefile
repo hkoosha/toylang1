@@ -20,7 +20,7 @@ run: c
 
 .PHONY: clippy
 clippy: c
-	cargo clippy
+	cargo clippy --tests
 
 .PHONY: format
 format:

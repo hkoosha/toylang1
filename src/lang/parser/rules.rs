@@ -1069,7 +1069,7 @@ mod tests {
     use super::*;
 
     fn proper_grammar() -> &'static str {
-        const GRAMMAR: &'static str = "
+        const GRAMMAR: &str = "
 S               -> fn_call | fn_declaration
 fn_call         -> ID ( args ) ;
 args            -> arg , args | arg
@@ -1091,7 +1091,7 @@ ret             -> RETURN expressions ;
     }
 
     fn recursive_grammar() -> &'static str {
-        const GRAMMAR: &'static str = "
+        const GRAMMAR: &str = "
 S               -> S fn_call | ID | S fn_declaration | RETURN
 fn_call         -> ID ( ID ) ;
 fn_declaration  -> FN ID ( S ) { fn_call }
@@ -1101,7 +1101,7 @@ fn_declaration  -> FN ID ( S ) { fn_call }
     }
 
     fn indirect_recursive_grammar0() -> &'static str {
-        const GRAMMAR: &'static str = "
+        const GRAMMAR: &str = "
 S  -> a1 a2 | FN
 a1 -> ID | a2 S
 a2 -> RETURN | S S
@@ -1111,7 +1111,7 @@ a2 -> RETURN | S S
     }
 
     fn indirect_recursive_grammar1() -> &'static str {
-        const GRAMMAR: &'static str = "
+        const GRAMMAR: &str = "
 S  -> a1
 a1 -> a2 ID | ID
 a2 -> a1 RETURN
@@ -1122,7 +1122,7 @@ a2 -> a1 RETURN
 
 
     fn expected_proper_grammar() -> &'static str {
-        const EXPECTED: &'static str = "\
+        const EXPECTED: &str = "\
 Rules[
   S                    -> fn_call | fn_declaration
   fn_call              -> ID ( args ) ;
@@ -1146,7 +1146,7 @@ Rules[
     }
 
     fn expected_recursive_grammar() -> &'static str {
-        const EXPECTED: &'static str = "\
+        const EXPECTED: &str = "\
 Rules[
   S                    -> S fn_call | ID | S fn_declaration | RETURN
   fn_call              -> ID ( ID ) ;
@@ -1158,7 +1158,7 @@ Rules[
     }
 
     fn expected_recursive_grammar_recursion_eliminated() -> &'static str {
-        const EXPECTED: &'static str = "\
+        const EXPECTED: &str = "\
 Rules[
   S                    -> ID S__0 | RETURN S__0
   fn_call              -> ID ( ID ) ;
@@ -1171,7 +1171,7 @@ Rules[
     }
 
     fn expected_recursive_grammar_indirect_recursion_eliminated0() -> &'static str {
-        const EXPECTED: &'static str = "\
+        const EXPECTED: &str = "\
 Rules[
   Rule[S  -> a1 a2 | FN]
   Rule[a1 -> ID | a2 S]
@@ -1184,7 +1184,7 @@ Rules[
     }
 
     fn expected_recursive_grammar_indirect_recursion_eliminated1() -> &'static str {
-        const EXPECTED: &'static str = "\
+        const EXPECTED: &str = "\
 Rules[
   S                    -> a1
   a1                   -> a2 ID | ID
@@ -1280,7 +1280,7 @@ Rules[
 
         let rules: Result<Rules, String> = r.try_into();
         let rules = rules.unwrap();
-        println!("{}", rules.to_string());
+        println!("{}", rules);
         rules.validate().unwrap();
 
         assert_eq!(
@@ -1304,7 +1304,7 @@ Rules[
 
         let rules: Result<Rules, String> = r.try_into();
         let rules = rules.unwrap();
-        println!("{}", rules.to_string());
+        println!("{}", rules);
         rules.validate().unwrap();
 
         let mut first: HashMap<String, HashSet<TokenKind>> = rules
@@ -1339,7 +1339,7 @@ Rules[
         let rules: Result<Rules, String> = r.try_into();
         let mut rules = rules.unwrap();
         rules.eliminate_left_recursions();
-        println!("{}", rules.to_string());
+        println!("{}", rules);
 
         rules.validate().unwrap();
 
@@ -1366,12 +1366,12 @@ Rules[
         let rules: Result<Rules, String> = r.try_into();
         let mut rules = rules.unwrap();
         rules.eliminate_left_recursions();
-        println!("{}", rules.to_string());
+        println!("{}", rules);
 
         rules.validate().unwrap();
 
         rules.make_ready_for_recursive_decent(512).unwrap();
 
-        println!("{}", rules.to_string());
+        println!("{}", rules);
     }
 }
