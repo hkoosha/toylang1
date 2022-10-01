@@ -45,7 +45,8 @@ const SAMPLE_UNPARSABLE_PROGRAM: &str = "\
 
 const GRAMMAR: &str = "
 
-S               -> fn_call | fn_declaration
+S               -> fn_call_or_decl , S | fn_call_or_decl |
+fn_call_or_decl -> fn_call | fn_declaration
 fn_call         -> ID ( args ) ;
 args            -> arg , args | arg |
 arg             -> STRING | INT | ID
@@ -112,8 +113,10 @@ fn first_follow_start(rules: &Rules) {
 fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
     println!("correct");
 
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
-    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
+    let tokens = match Lexer::parse(SAMPLE_CORRECT_PROGRAM_0) {
+        Ok(tokens) => tokens,
+        Err(err) => return Err(err.to_string()),
+    };
 
     let parsed = parse_with_backtracking(rules, tokens.into_iter());
 
@@ -134,9 +137,10 @@ fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
 fn backtracking_incorrect_program(rules: &Rules) -> Result<(), String> {
     println!("incorrect");
 
-    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
-    // Parsed successfully above, ok to unwrap.
-    let tokens: Vec<_> = lexer.into_iter().map(|it| it.unwrap()).collect();
+    let tokens = match Lexer::parse(SAMPLE_INCORRECT_PROGRAM) {
+        Ok(tokens) => tokens,
+        Err(err) => return Err(err.to_string()),
+    };
 
     let parsed = parse_with_backtracking(rules, tokens.into_iter());
 

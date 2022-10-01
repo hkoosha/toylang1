@@ -66,6 +66,25 @@ fn is_epsilon(node: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
     }
 }
 
+fn is_empty_program_rule(focus: &Option<Rc<RefCell<Node<'_>>>>) -> bool {
+    if focus.is_none() {
+        return false;
+    }
+    let focus_u = focus.as_ref().unwrap();
+    let focus_b = focus_u.borrow();
+
+    focus_b.rule_part().is_epsilon()
+        && focus_b.parent().is_some()
+        && focus_b
+            .parent()
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .rule_part()
+            .name()
+            == "S"
+}
+
 fn is_eof(
     node: &Option<Rc<RefCell<Node<'_>>>>,
     word: &Option<Token<'_>>,
@@ -180,6 +199,17 @@ pub fn parse_with_backtracking<'a, 'b, T: DoubleEndedIterator<Item = Token<'a>>>
     let mut stack: Vec<Rc<RefCell<Node>>> = vec![];
 
     let error: String = loop {
+        if focus.is_some() {
+            println!(
+                "FOCUS: {}",
+                focus.as_ref().unwrap().borrow().rule_part().name()
+            );
+        }
+        else {
+            println!("FOCUS: None");
+        }
+        println!("WORD: {:?}", word);
+
         if is_non_terminal_with_alt(&focus) {
             let alt_no = focus.as_mut().unwrap().borrow_mut().alt();
             let mut children: Vec<Rc<RefCell<Node<'a>>>> = vec![];
@@ -208,6 +238,9 @@ pub fn parse_with_backtracking<'a, 'b, T: DoubleEndedIterator<Item = Token<'a>>>
             trace!("AFTER\n{}", display_of(&root));
             print_stack(&stack);
             trace!("===========================================================");
+        }
+        else if is_empty_program_rule(&focus) && !tokens.is_empty() {
+            break "could not match input".to_string();
         }
         else if is_epsilon(&focus) {
             trace!("happy epsilon while at: {}", word.as_ref().unwrap().text);
@@ -272,5 +305,29 @@ pub fn parse_with_backtracking<'a, 'b, T: DoubleEndedIterator<Item = Token<'a>>>
     }
     else {
         Err(ParseError::new(&root, error))
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::lang::lexer::v0::Lexer;
+    use crate::lang::parser::rules::Rules;
+    use crate::lang::parser_impl::backtracking_parser::parse_with_backtracking;
+
+    #[test]
+    fn test_empty_program() {
+        let rules: Rules = "\
+            S    ->   r0 , S | r0 |
+            r0   ->   ID
+        "
+        .try_into()
+        .unwrap();
+
+        rules.validate().unwrap();
+
+        let tokens = Lexer::parse("").unwrap();
+
+        parse_with_backtracking(&rules, tokens.into_iter()).unwrap();
     }
 }

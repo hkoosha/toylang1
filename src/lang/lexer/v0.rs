@@ -1,3 +1,6 @@
+use std::fmt::Display;
+use std::fmt::Formatter;
+
 use log::trace;
 
 use crate::lang::lexer::token::Token;
@@ -54,6 +57,19 @@ pub struct LexerError {
     pub error: String,
 }
 
+impl Display for LexerError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "LexerError[{}, at {}/{}]",
+            self.error, self.line, self.position
+        )
+    }
+}
+
 pub type LexerResult<'a> = Result<Token<'a>, LexerError>;
 
 
@@ -81,6 +97,22 @@ impl<'a> Lexer<'a> {
             produced_eof: false,
         }
     }
+
+    pub fn parse(text: &'a str) -> Result<Vec<Token<'a>>, LexerError> {
+        let lexer: Self = text.into();
+
+        let mut tokens: Vec<Token<'a>> = vec![];
+
+        for token in lexer.into_iter() {
+            match token {
+                Ok(token) => tokens.push(token),
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(tokens)
+    }
+
 
     fn skip_whitespaces(&mut self) {
         let mut count = 0;
