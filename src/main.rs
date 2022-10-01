@@ -11,7 +11,8 @@ use toylang1::lang::parser_impl::backtracking_parser::parse_with_backtracking;
 use toylang1::lang::parser_impl::recursive_descent_parser::recursive_descent_parse;
 
 #[allow(dead_code)]
-const SAMPLE_CORRECT_PROGRAM_0: &str = "\
+fn get(what: &str) -> &'static str {
+    const SAMPLE_CORRECT_PROGRAM_0: &str = "\
     fn my_thing42(int j, string q) {
         x1 = 1 * 30;
         x2 = x3 / 10;
@@ -25,25 +26,22 @@ const SAMPLE_CORRECT_PROGRAM_0: &str = "\
         return x0 + 0;
     }";
 
-#[allow(dead_code)]
-const SAMPLE_CORRECT_PROGRAM_1: &str = "\
+    const SAMPLE_CORRECT_PROGRAM_1: &str = "\
     fn my_thing42() {
         print(\"hell\");
     }";
 
-#[allow(dead_code)]
-const SAMPLE_INCORRECT_PROGRAM: &str = "\
+    const SAMPLE_INCORRECT_PROGRAM_0: &str = "\
     fn my_thing42(int j) {
     ";
 
-#[allow(dead_code)]
-const SAMPLE_UNPARSABLE_PROGRAM: &str = "\
+    const SAMPLE_UNPARSABLE_PROGRAM_0: &str = "\
     fn my_thing42(int j) {
         123abc = 1 * 2;
     }
     ";
 
-const GRAMMAR: &str = "
+    const GRAMMAR_0: &str = "
 
 S               -> fn_call_or_decl , S | fn_call_or_decl |
 fn_call_or_decl -> fn_call | fn_declaration
@@ -61,6 +59,16 @@ factor          -> ( expressions ) | INT | ID
 ret             -> RETURN expressions ;
 
 ";
+
+    match what {
+        "correct_0" => SAMPLE_CORRECT_PROGRAM_0,
+        "correct_1" => SAMPLE_CORRECT_PROGRAM_1,
+        "incorrect_0" => SAMPLE_INCORRECT_PROGRAM_0,
+        "unparsable_0" => SAMPLE_UNPARSABLE_PROGRAM_0,
+        "grammar_0" => GRAMMAR_0,
+        _ => panic!("unknown get: {}", what),
+    }
+}
 
 #[allow(dead_code)]
 fn yes() -> bool {
@@ -113,7 +121,7 @@ fn first_follow_start(rules: &Rules) {
 fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
     println!("correct");
 
-    let tokens = match Lexer::parse(SAMPLE_CORRECT_PROGRAM_0) {
+    let tokens = match Lexer::parse(get("correct_0")) {
         Ok(tokens) => tokens,
         Err(err) => return Err(err.to_string()),
     };
@@ -137,7 +145,7 @@ fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
 fn backtracking_incorrect_program(rules: &Rules) -> Result<(), String> {
     println!("incorrect");
 
-    let tokens = match Lexer::parse(SAMPLE_INCORRECT_PROGRAM) {
+    let tokens = match Lexer::parse(get("incorrect_0")) {
         Ok(tokens) => tokens,
         Err(err) => return Err(err.to_string()),
     };
@@ -177,7 +185,7 @@ fn backtracking(rules: &Rules) -> Result<(), String> {
 
 #[allow(clippy::needless_collect)]
 fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
-    let lexer: Lexer = SAMPLE_CORRECT_PROGRAM_0.into();
+    let lexer: Lexer = get("correct_0").into();
 
     match recursive_descent_parse(rules, lexer.into_iter()) {
         Ok(tree) => {
@@ -193,7 +201,7 @@ fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
 
 #[allow(clippy::needless_collect)]
 fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
-    let lexer: Lexer = SAMPLE_INCORRECT_PROGRAM.into();
+    let lexer: Lexer = get("incorrect_0").into();
 
     match recursive_descent_parse(rules, lexer.into_iter()) {
         Ok(tree) => {
@@ -208,7 +216,7 @@ fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
 }
 
 fn recursive_unparsable_program(rules: &Rules) -> Result<(), String> {
-    let lexer: Lexer = SAMPLE_UNPARSABLE_PROGRAM.into();
+    let lexer: Lexer = get("unparsable_0").into();
 
     match recursive_descent_parse(rules, lexer.into_iter()) {
         Ok(tree) => {
@@ -244,7 +252,7 @@ fn main() -> Result<(), String> {
 
     println!("\n\n===================================================\n\n");
 
-    let mut rules: Rules = GRAMMAR.try_into()?;
+    let mut rules: Rules = get("grammar_0").try_into()?;
     rules.eliminate_left_recursions();
     rules.validate()?;
     println!("left-recursion-free: {}", rules);
