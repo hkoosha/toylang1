@@ -272,6 +272,16 @@ impl Rules {
             }
         }
 
+        // Start rule is S
+        {
+            if self.rules[0].borrow().name() != "S" {
+                return Err(format!(
+                    "expecting the first rule to be `S` as start rule, but got: {}",
+                    self.rules[0].borrow().name(),
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -773,7 +783,7 @@ impl Rules {
     // =========================================================================
 
     // Why this implementation? because it's late and I'm tired.
-    pub fn eliminate_left_common_prefix(&mut self) -> bool {
+    fn eliminate_left_common_prefix(&mut self) -> bool {
         fn cmp_prefix(
             alt0: &Vec<RulePart>,
             alt1: &Vec<RulePart>,
@@ -797,6 +807,7 @@ impl Rules {
             if rule.borrow().alternatives.len() < 2 {
                 continue;
             }
+            println!("at rule: {}", rule.borrow().name());
 
             let mut prefix_len: Option<usize> = None;
             let mut alt_index: Option<usize> = None;
@@ -1091,9 +1102,9 @@ fn_declaration  -> FN ID ( S ) { fn_call }
 
     fn indirect_recursive_grammar0() -> &'static str {
         const GRAMMAR: &'static str = "
-a0 -> a1 a2 | FN
-a1 -> ID | a2 a0
-a2 -> RETURN | a0 a0
+S  -> a1 a2 | FN
+a1 -> ID | a2 S
+a2 -> RETURN | S S
 ";
 
         GRAMMAR
@@ -1101,7 +1112,7 @@ a2 -> RETURN | a0 a0
 
     fn indirect_recursive_grammar1() -> &'static str {
         const GRAMMAR: &'static str = "
-a0 -> a1
+S  -> a1
 a1 -> a2 ID | ID
 a2 -> a1 RETURN
 ";
@@ -1162,10 +1173,10 @@ Rules[
     fn expected_recursive_grammar_indirect_recursion_eliminated0() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  Rule[a0 -> a1 a2 | FN]
-  Rule[a1 -> ID | a2 a0]
-  Rule[a2 -> RETURN | ID a2 a0 | a a0__0 | RETURN a2 a0 a0__0]
-  Rule[a0__0 -> a0 a2 a0 | a0 a2 a0 a0__0]
+  Rule[S  -> a1 a2 | FN]
+  Rule[a1 -> ID | a2 S]
+  Rule[a2 -> RETURN | ID a2 S | a S__0 | RETURN a2 S S__0]
+  Rule[S__0 -> S a2 S | S a2 S S__0]
 ]
         ";
 
@@ -1175,7 +1186,7 @@ Rules[
     fn expected_recursive_grammar_indirect_recursion_eliminated1() -> &'static str {
         const EXPECTED: &'static str = "\
 Rules[
-  a0                   -> a1
+  S                    -> a1
   a1                   -> a2 ID | ID
   a2                   -> ID RETURN a2__0
   a2__0                -> ID RETURN a2__0 | EPSILON
@@ -1265,7 +1276,7 @@ Rules[
 
     #[test]
     fn test_epsilon_rule() {
-        let r = "r0 -> r0 ID | EPSILON";
+        let r = "S -> S ID | EPSILON";
 
         let rules: Result<Rules, String> = r.try_into();
         let rules = rules.unwrap();
@@ -1276,7 +1287,7 @@ Rules[
             rules.to_string().trim(),
             "\
 Rules[
-  r0                   -> r0 ID | EPSILON
+  S                    -> S ID | EPSILON
 ]
         "
             .trim()
@@ -1287,7 +1298,7 @@ Rules[
     #[test]
     fn test_first_set() {
         let r = "\
-        r0 -> r0 ID | r1 | EPSILON
+        S -> S ID | r1 | EPSILON
         r1 -> STRING
         ";
 
@@ -1306,21 +1317,21 @@ Rules[
 
         assert_eq!(first.len(), 2);
 
-        let r0 = first.remove("r0").unwrap();
+        let s = first.remove("S").unwrap();
         let r1 = first.remove("r1").unwrap();
-        assert_eq!(r0.len(), 3);
+        assert_eq!(s.len(), 3);
         assert_eq!(r1.len(), 1);
 
-        assert!(r0.contains(&TokenKind::String));
-        assert!(r0.contains(&TokenKind::Id));
-        assert!(r0.contains(&TokenKind::Epsilon));
+        assert!(s.contains(&TokenKind::String));
+        assert!(s.contains(&TokenKind::Id));
+        assert!(s.contains(&TokenKind::Epsilon));
         assert!(r1.contains(&TokenKind::String));
     }
 
     #[test]
-    fn test_something() {
+    fn test_something0() {
         let r = "\
-        r0 -> r0 ID | r1 | r2
+        S -> S ID | r1 | r2
         r1 -> STRING
         r2 -> EPSILON
         ";
@@ -1342,5 +1353,25 @@ Rules[
 
         println!("{:?}", first);
         println!("{:?}", follow);
+    }
+
+    #[test]
+    fn test_something1() {
+        let r = "\
+        S  -> r0 | r1
+        r0 -> ID
+        r1 -> ID
+        ";
+
+        let rules: Result<Rules, String> = r.try_into();
+        let mut rules = rules.unwrap();
+        rules.eliminate_left_recursions();
+        println!("{}", rules.to_string());
+
+        rules.validate().unwrap();
+
+        rules.make_ready_for_recursive_decent(512).unwrap();
+
+        println!("{}", rules.to_string());
     }
 }
