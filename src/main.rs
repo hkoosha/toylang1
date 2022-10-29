@@ -117,7 +117,6 @@ fn first_follow_start(rules: &Rules) {
 }
 
 
-#[allow(clippy::needless_collect)]
 fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
     println!("correct");
 
@@ -141,7 +140,6 @@ fn backtracking_correct_program(rules: &Rules) -> Result<(), String> {
     Ok(())
 }
 
-#[allow(clippy::needless_collect)]
 fn backtracking_incorrect_program(rules: &Rules) -> Result<(), String> {
     println!("incorrect");
 
@@ -183,7 +181,6 @@ fn backtracking(rules: &Rules) -> Result<(), String> {
 }
 
 
-#[allow(clippy::needless_collect)]
 fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = get("correct_0").into();
 
@@ -199,7 +196,6 @@ fn recursive_correct_program(rules: &Rules) -> Result<(), String> {
     }
 }
 
-#[allow(clippy::needless_collect)]
 fn recursive_incorrect_program(rules: &Rules) -> Result<(), String> {
     let lexer: Lexer = get("incorrect_0").into();
 
@@ -246,7 +242,6 @@ fn recursive(rules: &Rules) -> Result<(), String> {
 }
 
 
-#[allow(clippy::needless_collect)]
 fn main() -> Result<(), String> {
     // en_log();
 
